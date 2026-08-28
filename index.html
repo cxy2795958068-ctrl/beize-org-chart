@@ -13,6 +13,7 @@
     <script src="./config.js"></script>
     <script type="module" src="./src/main.js"></script>
     <script type="module" src="./src/pan.js"></script>
+    <script type="module" src="./src/simple-mode.js"></script>
   </head>
   <body>
     <div id="app" class="app-shell">
@@ -30,7 +31,7 @@
         <div class="topbar-actions">
           <label class="search-box" for="search-input">
             <span aria-hidden="true">⌕</span>
-            <input id="search-input" type="search" placeholder="搜索部门、岗位或人员" autocomplete="off" />
+            <input id="search-input" type="search" placeholder="搜索部门、人员或岗位" autocomplete="off" />
           </label>
           <button id="members-button" class="button button-secondary" type="button">协作成员</button>
           <div id="sync-status" class="status-pill status-local" role="status" aria-live="polite">
@@ -110,7 +111,7 @@
           <div id="inspector-empty" class="inspector-empty">
             <div class="empty-icon" aria-hidden="true">↖</div>
             <h2>选择一个节点</h2>
-            <p>点击架构图中的卡片即可编辑名称、岗位、上级关系和备注。</p>
+            <p>点击部门或人员卡片即可编辑对应信息。</p>
           </div>
 
           <form id="node-form" class="node-form hidden">
@@ -125,9 +126,9 @@
             <label>
               <span>类型</span>
               <select id="field-type" name="type">
-                <option value="company">公司</option>
+                <option value="company" hidden>公司</option>
                 <option value="department">部门</option>
-                <option value="position">岗位</option>
+                <option value="position" hidden>岗位（旧数据）</option>
                 <option value="person">人员</option>
               </select>
             </label>
@@ -136,11 +137,11 @@
               <input id="field-name" name="name" maxlength="80" required />
             </label>
             <label>
-              <span>岗位 / 副标题</span>
-              <input id="field-title" name="title" maxlength="120" placeholder="例如：总经理、招商主管" />
+              <span>岗位</span>
+              <input id="field-title" name="title" maxlength="120" placeholder="例如：总经理、主管、组长" />
             </label>
             <label>
-              <span>上级节点</span>
+              <span>上级部门</span>
               <select id="field-parent" name="parent_id"></select>
             </label>
             <label>
