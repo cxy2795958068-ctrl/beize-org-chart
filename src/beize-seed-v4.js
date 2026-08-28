@@ -1,7 +1,7 @@
 (() => {
   const STORAGE_KEY = "beize-org-chart:demo:v1";
   const VERSION_KEY = "beize-org-chart:beize-seed-version";
-  const VERSION = "4";
+  const VERSION = "5";
 
   if (localStorage.getItem(VERSION_KEY) === VERSION) return;
 
