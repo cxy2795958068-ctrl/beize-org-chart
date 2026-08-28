@@ -2,6 +2,8 @@ import "./pan-overrides.css";
 
 const scroller = document.querySelector("#tree-scroller");
 const stage = document.querySelector("#tree-stage");
+const zoomInButton = document.querySelector("#zoom-in");
+const zoomOutButton = document.querySelector("#zoom-out");
 
 if (scroller && stage) {
   const panState = {
@@ -14,6 +16,8 @@ if (scroller && stage) {
     startX: 0,
     startY: 0,
   };
+
+  let lastWheelZoomAt = 0;
 
   const applyPan = () => {
     stage.style.setProperty("--pan-x", `${panState.x}px`);
@@ -85,6 +89,22 @@ if (scroller && stage) {
       scroller.classList.remove("is-panning");
     },
     true,
+  );
+
+  scroller.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      const now = performance.now();
+      if (now - lastWheelZoomAt < 70 || event.deltaY === 0) return;
+      lastWheelZoomAt = now;
+
+      if (event.deltaY < 0) zoomInButton?.click();
+      else zoomOutButton?.click();
+    },
+    { capture: true, passive: false },
   );
 
   applyPan();
