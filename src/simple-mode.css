@@ -1,0 +1,22 @@
+.stats-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.node-card.type-department .node-title,
+.node-card.type-company .node-title {
+  display: none;
+}
+
+.field-hidden,
+.legacy-stat-hidden,
+.legacy-legend-hidden {
+  display: none !important;
+}
+
+#field-title {
+  font-weight: 650;
+}
+
+#field-notes {
+  min-height: 120px;
+}
