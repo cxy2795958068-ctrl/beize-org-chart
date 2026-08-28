@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f8fa" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <meta
@@ -14,7 +14,9 @@
     <script type="module" src="./src/beize-seed-v4.js"></script>
     <script type="module" src="./src/main.js"></script>
     <script type="module" src="./src/pan.js"></script>
+    <script type="module" src="./src/mobile-click-guard.js"></script>
     <script type="module" src="./src/simple-mode.js"></script>
+    <script type="module" src="./src/local-import.js"></script>
   </head>
   <body>
     <div id="app" class="app-shell">
@@ -89,7 +91,7 @@
             <div>
               <span id="visible-count">0 个节点</span>
               <span id="filter-label" class="muted"></span>
-              <span class="canvas-hint">空白处任意方向拖动 · 滚轮缩放</span>
+              <span class="canvas-hint">拖动画布 · 滚轮 / 双指缩放</span>
             </div>
             <div class="canvas-toolbar-actions">
               <div class="compact-canvas-actions" aria-label="组织操作">
