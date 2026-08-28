@@ -43,14 +43,18 @@ function filterParentOptions(type) {
       option.hidden = type === "person";
       continue;
     }
+
     const text = option.textContent?.trim() ?? "";
     const isDepartment = text.startsWith("部门 ·");
+    const isPerson = text.startsWith("人员 ·");
     const isCompany = text.startsWith("公司 ·");
     const isCurrent = option.value === fieldParent.value;
 
-    if (type === "person") option.hidden = !isDepartment && !isCurrent;
-    else if (type === "department") option.hidden = !(isDepartment || isCompany || isCurrent);
-    else option.hidden = false;
+    if (type === "person" || type === "department") {
+      option.hidden = !(isDepartment || isPerson || isCompany || isCurrent);
+    } else {
+      option.hidden = false;
+    }
   }
 }
 
@@ -63,21 +67,24 @@ function syncInspector() {
 
   if (type === "department") {
     setLabelText(nameLabel, "部门名称");
-    setLabelText(parentLabel, "上级部门");
+    setLabelText(parentLabel, "上级（公司 / 部门 / 人员）");
     titleLabel?.classList.add("field-hidden");
     notesLabel?.classList.add("field-hidden");
     if (addChildButton) {
       addChildButton.classList.remove("field-hidden");
-      addChildButton.textContent = "＋ 添加人员 / 下级部门";
+      addChildButton.textContent = "＋ 添加下级部门 / 人员";
     }
   } else if (type === "person") {
     setLabelText(nameLabel, "人员姓名");
     setLabelText(titleLabel, "岗位");
-    setLabelText(parentLabel, "所属部门");
+    setLabelText(parentLabel, "上级（部门 / 人员）");
     setLabelText(notesLabel, "备注");
     titleLabel?.classList.remove("field-hidden");
     notesLabel?.classList.remove("field-hidden");
-    addChildButton?.classList.add("field-hidden");
+    if (addChildButton) {
+      addChildButton.classList.remove("field-hidden");
+      addChildButton.textContent = "＋ 添加下级部门 / 人员";
+    }
   } else if (type === "company") {
     setLabelText(nameLabel, "公司名称");
     titleLabel?.classList.add("field-hidden");
@@ -85,7 +92,7 @@ function syncInspector() {
     notesLabel?.classList.add("field-hidden");
     if (addChildButton) {
       addChildButton.classList.remove("field-hidden");
-      addChildButton.textContent = "＋ 添加部门";
+      addChildButton.textContent = "＋ 添加部门 / 人员";
     }
   } else {
     // 兼容已有“岗位”旧节点：允许用户在类型下拉中直接改成部门或人员。
@@ -94,7 +101,10 @@ function syncInspector() {
     setLabelText(parentLabel, "上级节点");
     titleLabel?.classList.remove("field-hidden");
     notesLabel?.classList.remove("field-hidden");
-    addChildButton?.classList.add("field-hidden");
+    if (addChildButton) {
+      addChildButton.classList.remove("field-hidden");
+      addChildButton.textContent = "＋ 添加下级部门 / 人员";
+    }
   }
 
   if (type !== "company") parentLabel?.classList.remove("field-hidden");
