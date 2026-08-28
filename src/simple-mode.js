@@ -67,6 +67,7 @@ function syncInspector() {
 
   if (type === "department") {
     setLabelText(nameLabel, "部门名称");
+    if (fieldName) fieldName.placeholder = "请输入部门名称";
     setLabelText(parentLabel, "上级（公司 / 部门 / 人员）");
     titleLabel?.classList.add("field-hidden");
     notesLabel?.classList.add("field-hidden");
@@ -76,7 +77,9 @@ function syncInspector() {
     }
   } else if (type === "person") {
     setLabelText(nameLabel, "人员姓名");
+    if (fieldName) fieldName.placeholder = "请输入人员姓名";
     setLabelText(titleLabel, "岗位");
+    if (fieldTitle) fieldTitle.placeholder = "请输入岗位";
     setLabelText(parentLabel, "上级（部门 / 人员）");
     setLabelText(notesLabel, "备注");
     titleLabel?.classList.remove("field-hidden");
@@ -87,6 +90,7 @@ function syncInspector() {
     }
   } else if (type === "company") {
     setLabelText(nameLabel, "公司名称");
+    if (fieldName) fieldName.placeholder = "请输入公司名称";
     titleLabel?.classList.add("field-hidden");
     parentLabel?.classList.add("field-hidden");
     notesLabel?.classList.add("field-hidden");
@@ -95,9 +99,10 @@ function syncInspector() {
       addChildButton.textContent = "＋ 添加部门 / 人员";
     }
   } else {
-    // 兼容已有“岗位”旧节点：允许用户在类型下拉中直接改成部门或人员。
     setLabelText(nameLabel, "名称");
+    if (fieldName) fieldName.placeholder = "请输入名称";
     setLabelText(titleLabel, "岗位");
+    if (fieldTitle) fieldTitle.placeholder = "请输入岗位";
     setLabelText(parentLabel, "上级节点");
     titleLabel?.classList.remove("field-hidden");
     notesLabel?.classList.remove("field-hidden");
@@ -145,14 +150,20 @@ function configureCreateModal() {
     const type = select.value;
     if (type === "department") {
       setLabelText(nameFieldLabel, "部门名称");
+      if (nameInput) nameInput.placeholder = "请输入部门名称";
       titleFieldLabel?.classList.add("field-hidden");
       notesFieldLabel?.classList.add("field-hidden");
-      if (titleInput) titleInput.value = "";
+      if (titleInput) {
+        titleInput.value = "";
+        titleInput.placeholder = "请输入岗位";
+      }
       if (notesTextarea) notesTextarea.value = "";
     } else {
       select.value = "person";
       setLabelText(nameFieldLabel, "人员姓名");
+      if (nameInput) nameInput.placeholder = "请输入人员姓名";
       setLabelText(titleFieldLabel, "岗位");
+      if (titleInput) titleInput.placeholder = "请输入岗位";
       titleFieldLabel?.classList.remove("field-hidden");
       notesFieldLabel?.classList.remove("field-hidden");
     }
