@@ -1,15 +1,15 @@
 .brand {
-  min-width: 380px;
+  min-width: 400px;
 }
 
 .brand h1 {
-  font-size: 23px;
+  font-size: 25px;
   line-height: 1.25;
-  font-weight: 780;
+  font-weight: 800;
 }
 
 .brand p {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .tree-scroller {
@@ -29,41 +29,68 @@
   will-change: transform;
 }
 
+.org-tree li {
+  padding: 34px 10px 0;
+}
+
+.org-tree li::before,
+.org-tree li::after,
+.org-tree ul::before {
+  height: 34px;
+}
+
+.org-tree li:only-child {
+  padding-top: 34px;
+}
+
+.org-tree > li:only-child {
+  padding-top: 0;
+}
+
+.org-tree > li > .node-card + ul {
+  margin-top: 34px;
+}
+
 .node-card {
-  width: 224px;
-  min-height: 126px;
+  width: 280px;
+  min-height: 156px;
+  border-radius: 16px;
+}
+
+.node-strip {
+  height: 8px;
 }
 
 .node-body {
-  padding: 16px 18px 18px;
+  padding: 20px 22px 22px;
 }
 
 .node-type {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.35;
 }
 
 .node-name {
-  max-width: 192px;
-  margin-top: 8px;
-  font-size: 22px;
-  font-weight: 780;
-  line-height: 1.4;
+  max-width: 238px;
+  margin-top: 10px;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 
 .node-title {
-  max-width: 194px;
-  margin-top: 7px;
-  font-size: 16px;
-  line-height: 1.45;
+  max-width: 240px;
+  margin-top: 9px;
+  font-size: 20px;
+  line-height: 1.4;
 }
 
 .canvas-toolbar {
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .canvas-hint {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 @media (max-width: 820px) {
@@ -72,7 +99,22 @@
   }
 
   .brand h1 {
-    font-size: 20px;
+    font-size: 21px;
+  }
+
+  .node-card {
+    width: 250px;
+    min-height: 146px;
+  }
+
+  .node-name {
+    max-width: 212px;
+    font-size: 26px;
+  }
+
+  .node-title {
+    max-width: 214px;
+    font-size: 19px;
   }
 }
 
