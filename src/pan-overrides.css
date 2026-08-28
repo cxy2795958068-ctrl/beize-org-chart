@@ -1,11 +1,15 @@
 .brand {
-  min-width: 340px;
+  min-width: 380px;
 }
 
 .brand h1 {
-  font-size: 20px;
+  font-size: 23px;
   line-height: 1.25;
-  font-weight: 760;
+  font-weight: 780;
+}
+
+.brand p {
+  font-size: 14px;
 }
 
 .tree-scroller {
@@ -26,30 +30,40 @@
 }
 
 .node-card {
-  width: 196px;
-  min-height: 108px;
+  width: 224px;
+  min-height: 126px;
 }
 
 .node-body {
-  padding: 14px 16px;
+  padding: 16px 18px 18px;
 }
 
 .node-type {
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .node-name {
-  max-width: 164px;
-  margin-top: 7px;
-  font-size: 18px;
+  max-width: 192px;
+  margin-top: 8px;
+  font-size: 22px;
+  font-weight: 780;
   line-height: 1.4;
 }
 
 .node-title {
-  max-width: 166px;
-  margin-top: 6px;
+  max-width: 194px;
+  margin-top: 7px;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.canvas-toolbar {
   font-size: 14px;
-  line-height: 1.4;
+}
+
+.canvas-hint {
+  font-size: 13px;
 }
 
 @media (max-width: 820px) {
@@ -58,7 +72,7 @@
   }
 
   .brand h1 {
-    font-size: 18px;
+    font-size: 20px;
   }
 }
 
