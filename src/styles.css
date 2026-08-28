@@ -638,6 +638,7 @@ textarea:disabled {
 .node-card {
   width: 174px;
   min-height: 92px;
+  margin: 0 auto;
   padding: 0;
   display: block;
   position: relative;
