@@ -5,10 +5,12 @@ if (scroller) {
   let suppressClickUntil = 0;
   let gestureHadMultiplePointers = false;
 
-  scroller.addEventListener(
+  const isInsideCanvas = (event) => event.composedPath?.().includes(scroller) || scroller.contains(event.target);
+
+  window.addEventListener(
     "pointerdown",
     (event) => {
-      if (event.pointerType !== "touch") return;
+      if (event.pointerType !== "touch" || !isInsideCanvas(event)) return;
       touches.set(event.pointerId, {
         startX: event.clientX,
         startY: event.clientY,
@@ -19,7 +21,7 @@ if (scroller) {
     true,
   );
 
-  scroller.addEventListener(
+  window.addEventListener(
     "pointermove",
     (event) => {
       const touch = touches.get(event.pointerId);
@@ -40,8 +42,8 @@ if (scroller) {
     if (!touches.size) gestureHadMultiplePointers = false;
   };
 
-  scroller.addEventListener("pointerup", finish, true);
-  scroller.addEventListener("pointercancel", finish, true);
+  window.addEventListener("pointerup", finish, true);
+  window.addEventListener("pointercancel", finish, true);
 
   scroller.addEventListener(
     "click",
