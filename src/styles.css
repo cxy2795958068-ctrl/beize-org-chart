@@ -29,6 +29,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100%;
+  overflow-x: hidden;
   background: #f4f5f7;
 }
 
@@ -64,9 +65,11 @@ textarea:disabled {
 }
 
 .app-shell {
+  width: 100%;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .topbar {
@@ -304,10 +307,12 @@ textarea:disabled {
 }
 
 .workspace {
+  width: 100%;
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 240px minmax(520px, 1fr) 310px;
+  grid-template-columns: 220px minmax(0, 1fr) 300px;
+  overflow: hidden;
   background: var(--canvas);
 }
 
@@ -457,6 +462,23 @@ textarea:disabled {
   font-size: 12px;
 }
 
+.canvas-toolbar-actions,
+.compact-canvas-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compact-canvas-actions {
+  display: none;
+}
+
+.compact-canvas-actions .button {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
 .zoom-controls {
   display: inline-flex;
   padding: 3px;
@@ -482,14 +504,16 @@ textarea:disabled {
   flex: 1;
   min-height: 420px;
   overflow: auto;
-  padding: 38px 48px 80px;
+  padding: 28px 28px 64px;
   overscroll-behavior: contain;
 }
 
 .tree-stage {
   width: max-content;
   min-width: 100%;
-  transform-origin: top left;
+  display: grid;
+  justify-items: center;
+  transform-origin: top center;
   transition: transform 160ms ease;
 }
 
@@ -527,7 +551,7 @@ textarea:disabled {
 
 .org-tree li {
   position: relative;
-  padding: 30px 10px 0;
+  padding: 26px 6px 0;
   text-align: center;
 }
 
@@ -538,7 +562,7 @@ textarea:disabled {
   top: 0;
   right: 50%;
   width: 50%;
-  height: 30px;
+  height: 26px;
   border-top: 1px solid #c9cfd9;
 }
 
@@ -577,7 +601,7 @@ textarea:disabled {
   top: 0;
   left: 50%;
   width: 0;
-  height: 30px;
+  height: 26px;
   border-left: 1px solid #c9cfd9;
 }
 
@@ -587,12 +611,12 @@ textarea:disabled {
 }
 
 .org-tree > li > .node-card + ul {
-  margin-top: 30px;
+  margin-top: 26px;
 }
 
 .node-card {
-  width: 190px;
-  min-height: 104px;
+  width: 174px;
+  min-height: 92px;
   padding: 0;
   display: block;
   position: relative;
@@ -601,7 +625,7 @@ textarea:disabled {
   border-radius: 14px;
   background: white;
   box-shadow: 0 8px 22px rgba(26, 33, 48, 0.07);
-  text-align: left;
+  text-align: center;
   color: var(--ink);
 }
 
@@ -643,7 +667,7 @@ textarea:disabled {
 }
 
 .node-body {
-  padding: 14px 15px 13px;
+  padding: 12px 14px;
 }
 
 .node-type {
@@ -655,8 +679,8 @@ textarea:disabled {
 
 .node-name {
   display: block;
-  max-width: 146px;
-  margin-top: 6px;
+  max-width: 134px;
+  margin: 6px auto 0;
   overflow: hidden;
   color: #202839;
   font-size: 14px;
@@ -668,8 +692,8 @@ textarea:disabled {
 
 .node-title {
   display: block;
-  max-width: 154px;
-  margin-top: 5px;
+  max-width: 140px;
+  margin: 5px auto 0;
   overflow: hidden;
   color: #71798a;
   font-size: 11px;
@@ -981,13 +1005,21 @@ textarea:focus {
   font-weight: 750;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {
   .workspace {
-    grid-template-columns: 220px minmax(520px, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .compact-canvas-actions {
+    display: flex;
   }
 
   .inspector {
-    width: 330px;
+    width: min(350px, 92vw);
     position: fixed;
     top: 76px;
     right: 0;
@@ -1041,10 +1073,6 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 
-  .sidebar {
-    display: none;
-  }
-
   .inspector {
     top: 76px;
     width: min(360px, 92vw);
@@ -1075,6 +1103,39 @@ textarea:focus {
 
   .canvas-toolbar {
     padding: 0 12px;
+  }
+
+  .compact-canvas-actions .button {
+    width: 36px;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    color: transparent;
+    position: relative;
+  }
+
+  .compact-canvas-actions .button::first-letter {
+    color: currentColor;
+  }
+
+  #compact-add-root-button {
+    color: white;
+    font-size: 0;
+  }
+
+  #compact-add-root-button::before {
+    content: "+";
+    font-size: 18px;
+  }
+
+  #compact-trash-button {
+    color: #596274;
+    font-size: 0;
+  }
+
+  #compact-trash-button::before {
+    content: "↺";
+    font-size: 16px;
   }
 
   .tree-scroller {

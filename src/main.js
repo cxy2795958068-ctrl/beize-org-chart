@@ -36,6 +36,8 @@ const dom = {
   statPeople: $("#stat-people"),
   addRootButton: $("#add-root-button"),
   trashButton: $("#trash-button"),
+  compactAddRootButton: $("#compact-add-root-button"),
+  compactTrashButton: $("#compact-trash-button"),
   visibleCount: $("#visible-count"),
   filterLabel: $("#filter-label"),
   zoomOut: $("#zoom-out"),
@@ -370,6 +372,7 @@ function parentLabel(node) {
 
 function renderInspector(force = false) {
   const node = selectedNode();
+  dom.inspector.classList.toggle("open", Boolean(node));
   dom.inspectorEmpty.classList.toggle("hidden", Boolean(node));
   dom.nodeForm.classList.toggle("hidden", !node);
   if (!node) return;
@@ -399,7 +402,7 @@ function renderInspector(force = false) {
 
 function applyPermissions() {
   const editable = canEdit();
-  for (const element of [dom.fieldType, dom.fieldName, dom.fieldTitle, dom.fieldParent, dom.fieldNotes, dom.addChildButton, dom.moveUpButton, dom.moveDownButton, dom.deleteNodeButton, dom.addRootButton]) {
+  for (const element of [dom.fieldType, dom.fieldName, dom.fieldTitle, dom.fieldParent, dom.fieldNotes, dom.addChildButton, dom.moveUpButton, dom.moveDownButton, dom.deleteNodeButton, dom.addRootButton, dom.compactAddRootButton]) {
     element.disabled = !editable;
   }
   dom.membersButton.textContent = canManageMembers() ? "协作成员" : "成员列表";
@@ -1364,6 +1367,10 @@ async function initialize() {
 }
 
 function bindEvents() {
+  const createTopLevelNode = () => {
+    const company = activeNodes().find((node) => node.type === "company");
+    showCreateNodeModal(company?.id ?? null);
+  };
   dom.searchInput.addEventListener("input", () => {
     state.query = dom.searchInput.value;
     renderTree();
@@ -1375,13 +1382,12 @@ function bindEvents() {
     const node = selectedNode();
     if (node && state.dirty.has(node.id)) scheduleSave(node.id, 80);
   });
-  dom.addRootButton.addEventListener("click", () => {
-    const company = activeNodes().find((node) => node.type === "company");
-    showCreateNodeModal(company?.id ?? null);
-  });
+  dom.addRootButton.addEventListener("click", createTopLevelNode);
+  dom.compactAddRootButton.addEventListener("click", createTopLevelNode);
   dom.addChildButton.addEventListener("click", () => showCreateNodeModal(state.selectedId));
   dom.deleteNodeButton.addEventListener("click", confirmDeleteSelected);
   dom.trashButton.addEventListener("click", showTrash);
+  dom.compactTrashButton.addEventListener("click", showTrash);
   dom.moveUpButton.addEventListener("click", () => reorderSelected("up"));
   dom.moveDownButton.addEventListener("click", () => reorderSelected("down"));
   dom.closeInspector.addEventListener("click", clearSelection);

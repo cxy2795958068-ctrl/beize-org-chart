@@ -85,10 +85,16 @@
               <span id="visible-count">0 个节点</span>
               <span id="filter-label" class="muted"></span>
             </div>
-            <div class="zoom-controls" aria-label="缩放控制">
-              <button id="zoom-out" type="button" aria-label="缩小">−</button>
-              <button id="zoom-reset" type="button" aria-label="恢复 100%"><span id="zoom-value">100%</span></button>
-              <button id="zoom-in" type="button" aria-label="放大">＋</button>
+            <div class="canvas-toolbar-actions">
+              <div class="compact-canvas-actions" aria-label="组织操作">
+                <button id="compact-add-root-button" class="button button-primary" type="button">＋ 新增部门</button>
+                <button id="compact-trash-button" class="button button-ghost" type="button">回收站</button>
+              </div>
+              <div class="zoom-controls" aria-label="缩放控制">
+                <button id="zoom-out" type="button" aria-label="缩小">−</button>
+                <button id="zoom-reset" type="button" aria-label="恢复 100%"><span id="zoom-value">100%</span></button>
+                <button id="zoom-in" type="button" aria-label="放大">＋</button>
+              </div>
             </div>
           </div>
           <div id="tree-scroller" class="tree-scroller">
