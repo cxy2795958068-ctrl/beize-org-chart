@@ -9,9 +9,10 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
     />
-    <title>北泽公司 · 组织架构</title>
+    <title>东莞市北泽五金制品有限公司 · 组织架构</title>
     <script src="./config.js"></script>
     <script type="module" src="./src/main.js"></script>
+    <script type="module" src="./src/pan.js"></script>
   </head>
   <body>
     <div id="app" class="app-shell">
@@ -21,7 +22,7 @@
             <img src="./kizi-flow-logo.png" alt="KIZI Flow" />
           </div>
           <div>
-            <h1 id="org-title">北泽公司</h1>
+            <h1 id="org-title">东莞市北泽五金制品有限公司</h1>
             <p>组织架构管理台</p>
           </div>
         </div>
@@ -86,7 +87,7 @@
             <div>
               <span id="visible-count">0 个节点</span>
               <span id="filter-label" class="muted"></span>
-              <span class="canvas-hint">空白处拖动 · Ctrl＋滚轮缩放</span>
+              <span class="canvas-hint">空白处任意方向拖动 · Ctrl＋滚轮缩放</span>
             </div>
             <div class="canvas-toolbar-actions">
               <div class="compact-canvas-actions" aria-label="组织操作">
@@ -166,7 +167,7 @@
     <div id="auth-screen" class="auth-screen hidden">
       <div class="auth-card">
         <div class="brand-mark large" aria-hidden="true">BZ</div>
-        <span class="eyebrow">北泽公司</span>
+        <span class="eyebrow">东莞市北泽五金制品有限公司</span>
         <h1>组织架构管理台</h1>
         <p id="auth-description">输入工作邮箱，我们会发送一次性登录链接。</p>
         <form id="auth-form">
@@ -179,7 +180,7 @@
         <form id="create-org-form" class="hidden">
           <label>
             <span>公司名称</span>
-            <input id="create-org-name" maxlength="80" value="北泽公司" required />
+            <input id="create-org-name" maxlength="80" value="东莞市北泽五金制品有限公司" required />
           </label>
           <button class="button button-primary button-block" type="submit">创建组织</button>
         </form>
