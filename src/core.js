@@ -141,12 +141,28 @@ export function countByType(nodes) {
 export function makeDemoNodes() {
   const now = new Date().toISOString();
   return [
-    { id: "demo-company", parent_id: null, type: "company", name: "北泽公司", title: "组织中心", sort_order: 0 },
-    { id: "demo-ops", parent_id: "demo-company", type: "department", name: "运营管理部", title: "经营协同", sort_order: 10 },
-    { id: "demo-market", parent_id: "demo-company", type: "department", name: "市场发展部", title: "品牌与增长", sort_order: 20 },
-    { id: "demo-finance", parent_id: "demo-company", type: "department", name: "财务部", title: "财务与风控", sort_order: 30 },
-    { id: "demo-gm", parent_id: "demo-ops", type: "position", name: "运营负责人", title: "负责人", sort_order: 10 },
-    { id: "demo-person", parent_id: "demo-gm", type: "person", name: "待填写", title: "运营负责人", sort_order: 10 },
+    { id: "demo-company", parent_id: null, type: "company", name: "东莞市北泽五金制品有限公司", title: "组织架构示例", sort_order: 0 },
+
+    { id: "dept-gm", parent_id: "demo-company", type: "department", name: "总经办", title: "", sort_order: 10 },
+    { id: "person-hlq", parent_id: "dept-gm", type: "person", name: "洪礼群", title: "总经理", notes: "公司经营管理", sort_order: 10 },
+    { id: "person-hxh", parent_id: "dept-gm", type: "person", name: "洪晓辉", title: "总经理", notes: "公司经营管理", sort_order: 20 },
+
+    { id: "dept-quality", parent_id: "demo-company", type: "department", name: "品质部", title: "", sort_order: 20 },
+    { id: "person-qe", parent_id: "dept-quality", type: "person", name: "程兴宇", title: "QE / 品质负责人", notes: "品质体系、客诉、供应商质量、异常改善", sort_order: 10 },
+    { id: "person-qa", parent_id: "dept-quality", type: "person", name: "蔡晓霞", title: "QA（规划）", notes: "后续岗位规划", sort_order: 20 },
+    { id: "person-data", parent_id: "dept-quality", type: "person", name: "吴宝玉", title: "品质数据员", notes: "品质数据、资料与异常履历", sort_order: 30 },
+    { id: "person-iqc1", parent_id: "dept-quality", type: "person", name: "王珍", title: "IQC", notes: "来料检验", sort_order: 40 },
+    { id: "person-iqc2", parent_id: "dept-quality", type: "person", name: "何陈妹", title: "IQC", notes: "来料检验", sort_order: 50 },
+    { id: "person-oqc1", parent_id: "dept-quality", type: "person", name: "杨巧", title: "OQC", notes: "出货检验", sort_order: 60 },
+    { id: "person-oqc2", parent_id: "dept-quality", type: "person", name: "贺家佳", title: "OQC", notes: "出货检验", sort_order: 70 },
+    { id: "person-ipqc", parent_id: "dept-quality", type: "person", name: "待招聘", title: "IPQC", notes: "制程巡检岗位规划", sort_order: 80 },
+    { id: "person-lab", parent_id: "dept-quality", type: "person", name: "待招聘", title: "实验室测试员", notes: "后续实验室岗位规划", sort_order: 90 },
+
+    { id: "dept-sales", parent_id: "demo-company", type: "department", name: "销售部", title: "", sort_order: 30 },
+    { id: "dept-tech", parent_id: "demo-company", type: "department", name: "技术部", title: "", sort_order: 40 },
+    { id: "dept-production", parent_id: "demo-company", type: "department", name: "生产部", title: "", sort_order: 50 },
+    { id: "dept-warehouse", parent_id: "demo-company", type: "department", name: "仓储部", title: "", sort_order: 60 },
+    { id: "dept-purchase", parent_id: "demo-company", type: "department", name: "采购部", title: "", sort_order: 70 },
+    { id: "dept-finance", parent_id: "demo-company", type: "department", name: "财务部", title: "", sort_order: 80 },
   ].map((node) => normalizeNode({ ...node, version: 1, updated_at: now }));
 }
-
