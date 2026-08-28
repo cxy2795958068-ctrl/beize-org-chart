@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7f8fa" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    />
+    <title>北泽公司 · 组织架构</title>
+    <script src="./config.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">BZ</div>
+          <div>
+            <h1 id="org-title">北泽公司</h1>
+            <p>组织架构管理台</p>
+          </div>
+        </div>
+
+        <div class="topbar-actions">
+          <label class="search-box" for="search-input">
+            <span aria-hidden="true">⌕</span>
+            <input id="search-input" type="search" placeholder="搜索部门、岗位或人员" autocomplete="off" />
+          </label>
+          <button id="members-button" class="button button-secondary" type="button">协作成员</button>
+          <div id="sync-status" class="status-pill status-local" role="status" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>正在初始化</span>
+          </div>
+          <button id="account-button" class="account-button" type="button" aria-label="账户菜单">本机</button>
+        </div>
+      </header>
+
+      <div id="offline-banner" class="banner hidden" role="status">
+        <span>网络已断开。修改会保存在本机，恢复网络后自动同步。</span>
+      </div>
+
+      <main class="workspace">
+        <aside class="sidebar" aria-label="组织概览">
+          <section>
+            <div class="section-heading">
+              <div>
+                <span class="eyebrow">概览</span>
+                <h2>组织统计</h2>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-card"><strong id="stat-departments">0</strong><span>部门</span></div>
+              <div class="stat-card"><strong id="stat-positions">0</strong><span>岗位</span></div>
+              <div class="stat-card"><strong id="stat-people">0</strong><span>人员</span></div>
+            </div>
+          </section>
+
+          <section class="legend-section">
+            <span class="eyebrow">图例</span>
+            <ul class="legend-list">
+              <li><span class="legend-swatch swatch-company"></span>公司</li>
+              <li><span class="legend-swatch swatch-department"></span>部门</li>
+              <li><span class="legend-swatch swatch-position"></span>岗位</li>
+              <li><span class="legend-swatch swatch-person"></span>人员</li>
+            </ul>
+          </section>
+
+          <section class="sidebar-actions">
+            <button id="add-root-button" class="button button-primary button-block" type="button">＋ 新增顶级部门</button>
+            <button id="trash-button" class="button button-ghost button-block" type="button">查看回收站</button>
+          </section>
+
+          <section class="help-card">
+            <span class="eyebrow">安全提示</span>
+            <p>删除会先进入回收站。多人同时修改同一节点时，系统会要求确认，不会静默覆盖。</p>
+          </section>
+        </aside>
+
+        <section class="canvas-panel" aria-label="组织架构图">
+          <div class="canvas-toolbar">
+            <div>
+              <span id="visible-count">0 个节点</span>
+              <span id="filter-label" class="muted"></span>
+            </div>
+            <div class="zoom-controls" aria-label="缩放控制">
+              <button id="zoom-out" type="button" aria-label="缩小">−</button>
+              <button id="zoom-reset" type="button" aria-label="恢复 100%"><span id="zoom-value">100%</span></button>
+              <button id="zoom-in" type="button" aria-label="放大">＋</button>
+            </div>
+          </div>
+          <div id="tree-scroller" class="tree-scroller">
+            <div id="tree-stage" class="tree-stage" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <aside id="inspector" class="inspector" aria-label="节点编辑器">
+          <div id="inspector-empty" class="inspector-empty">
+            <div class="empty-icon" aria-hidden="true">↖</div>
+            <h2>选择一个节点</h2>
+            <p>点击架构图中的卡片即可编辑名称、岗位、上级关系和备注。</p>
+          </div>
+
+          <form id="node-form" class="node-form hidden">
+            <div class="inspector-heading">
+              <div>
+                <span class="eyebrow">节点详情</span>
+                <h2 id="inspector-title">编辑节点</h2>
+              </div>
+              <button id="close-inspector" class="icon-button" type="button" aria-label="关闭编辑器">×</button>
+            </div>
+
+            <label>
+              <span>类型</span>
+              <select id="field-type" name="type">
+                <option value="company">公司</option>
+                <option value="department">部门</option>
+                <option value="position">岗位</option>
+                <option value="person">人员</option>
+              </select>
+            </label>
+            <label>
+              <span>名称</span>
+              <input id="field-name" name="name" maxlength="80" required />
+            </label>
+            <label>
+              <span>岗位 / 副标题</span>
+              <input id="field-title" name="title" maxlength="120" placeholder="例如：总经理、招商主管" />
+            </label>
+            <label>
+              <span>上级节点</span>
+              <select id="field-parent" name="parent_id"></select>
+            </label>
+            <label>
+              <span>备注</span>
+              <textarea id="field-notes" name="notes" rows="5" maxlength="1000" placeholder="职责范围、联系方式或补充说明"></textarea>
+            </label>
+
+            <div class="form-meta">
+              <span id="updated-meta">尚未保存</span>
+              <span id="role-meta"></span>
+            </div>
+
+            <div class="inspector-actions">
+              <button id="add-child-button" class="button button-primary" type="button">＋ 添加下级</button>
+              <button id="move-up-button" class="button button-secondary" type="button">上移</button>
+              <button id="move-down-button" class="button button-secondary" type="button">下移</button>
+            </div>
+            <button id="delete-node-button" class="button button-danger button-block" type="button">移入回收站</button>
+          </form>
+        </aside>
+      </main>
+    </div>
+
+    <div id="auth-screen" class="auth-screen hidden">
+      <div class="auth-card">
+        <div class="brand-mark large" aria-hidden="true">BZ</div>
+        <span class="eyebrow">北泽公司</span>
+        <h1>组织架构管理台</h1>
+        <p id="auth-description">输入工作邮箱，我们会发送一次性登录链接。</p>
+        <form id="auth-form">
+          <label>
+            <span>工作邮箱</span>
+            <input id="auth-email" type="email" required autocomplete="email" placeholder="name@company.com" />
+          </label>
+          <button class="button button-primary button-block" type="submit">发送登录链接</button>
+        </form>
+        <form id="create-org-form" class="hidden">
+          <label>
+            <span>公司名称</span>
+            <input id="create-org-name" maxlength="80" value="北泽公司" required />
+          </label>
+          <button class="button button-primary button-block" type="submit">创建组织</button>
+        </form>
+        <p id="auth-feedback" class="form-feedback" role="status"></p>
+      </div>
+    </div>
+
+    <div id="modal-backdrop" class="modal-backdrop hidden">
+      <section id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-heading">
+          <div>
+            <span id="modal-eyebrow" class="eyebrow">操作确认</span>
+            <h2 id="modal-title">确认操作</h2>
+          </div>
+          <button id="modal-close" class="icon-button" type="button" aria-label="关闭">×</button>
+        </div>
+        <div id="modal-content"></div>
+        <div id="modal-actions" class="modal-actions"></div>
+      </section>
+    </div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  </body>
+</html>
+
