@@ -57,6 +57,24 @@
   border-radius: 16px;
 }
 
+.node-card.type-department {
+  background: #eaf4ff;
+  border-color: #bdd8f2;
+}
+
+.node-card.type-department .node-strip {
+  background: #6ea8d8;
+}
+
+.node-card.type-person {
+  background: #f1f2f4;
+  border-color: #d9dde3;
+}
+
+.node-card.type-person .node-strip {
+  background: #a9afb8;
+}
+
 .node-strip {
   height: 8px;
 }
