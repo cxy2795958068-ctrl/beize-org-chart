@@ -6,68 +6,172 @@ const zoomInButton = document.querySelector("#zoom-in");
 const zoomOutButton = document.querySelector("#zoom-out");
 const zoomResetButton = document.querySelector("#zoom-reset");
 const zoomValue = document.querySelector("#zoom-value");
+const canvasHint = document.querySelector(".canvas-hint");
 
 if (scroller && stage) {
-  const panState = {
+  const MIN_ZOOM = 0.02;
+  const MAX_ZOOM = 2.2;
+  const TOUCH_PAN_GAIN = 1.38;
+  const MOUSE_PAN_GAIN = 1;
+  const DRAG_THRESHOLD = 4;
+  const INERTIA_FRICTION = 0.92;
+  const INERTIA_STOP_SPEED = 0.018;
+
+  const pointers = new Map();
+  const view = {
     x: 0,
     y: 0,
-    active: false,
-    pointerId: null,
-    startClientX: 0,
-    startClientY: 0,
-    startX: 0,
-    startY: 0,
+    zoom: 1,
+    mode: "idle",
+    primaryId: null,
+    dragStartX: 0,
+    dragStartY: 0,
+    dragStartPanX: 0,
+    dragStartPanY: 0,
+    dragPointerType: "mouse",
+    dragged: false,
+    velocityX: 0,
+    velocityY: 0,
+    lastMoveX: 0,
+    lastMoveY: 0,
+    lastMoveAt: 0,
+    pinchStartZoom: 1,
+    pinchStartDistance: 0,
+    pinchAnchorX: 0,
+    pinchAnchorY: 0,
+    inertiaFrame: null,
+    applyingLegacyZoomReset: false,
   };
-
-  // Own the visual zoom here so the canvas is no longer constrained by the
-  // legacy 50% minimum in main.js. Number.EPSILON keeps the CSS value positive
-  // without imposing a practical lower zoom limit. The 100% button is always
-  // available as a reliable way back if the user zooms extremely far out.
-  let visualZoom = Number.parseFloat(stage.style.zoom) || 1;
-  let lastWheelZoomAt = 0;
-  let applyingZoom = false;
 
   const formatZoom = (value) => {
     const percent = value * 100;
     if (percent >= 10) return `${Math.round(percent)}%`;
     if (percent >= 1) return `${percent.toFixed(1).replace(/\.0$/, "")}%`;
-    if (percent >= 0.01) return `${percent.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}%`;
-    return "<0.01%";
+    return `${percent.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")}%`;
   };
 
-  const applyPan = () => {
-    stage.style.setProperty("--pan-x", `${panState.x}px`);
-    stage.style.setProperty("--pan-y", `${panState.y}px`);
+  const clampZoom = (value) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
+
+  const applyView = () => {
+    stage.style.setProperty("--pan-x", `${view.x}px`);
+    stage.style.setProperty("--pan-y", `${view.y}px`);
+    stage.style.setProperty("--visual-zoom", String(view.zoom));
+    if (zoomValue) zoomValue.textContent = formatZoom(view.zoom);
   };
 
-  const applyVisualZoom = () => {
-    applyingZoom = true;
-    stage.style.zoom = String(visualZoom);
-    if (zoomValue) zoomValue.textContent = formatZoom(visualZoom);
+  const resetLegacyZoom = () => {
+    const legacyZoom = Number.parseFloat(stage.style.zoom) || 1;
+    if (Math.abs(legacyZoom - 1) < 1e-9) return;
+    view.applyingLegacyZoomReset = true;
+    stage.style.zoom = "1";
     queueMicrotask(() => {
-      applyingZoom = false;
+      view.applyingLegacyZoomReset = false;
     });
   };
 
-  const setVisualZoom = (nextZoom) => {
-    if (!Number.isFinite(nextZoom) || nextZoom <= 0) return;
-    visualZoom = Math.max(Number.EPSILON, Math.min(1.5, nextZoom));
-    applyVisualZoom();
-  };
-
-  const zoomOut = () => setVisualZoom(visualZoom * 0.82);
-  const zoomIn = () => setVisualZoom(visualZoom / 0.82);
-  const resetZoom = () => setVisualZoom(1);
-
-  // main.js re-renders the tree after edits and writes its own zoom value back
-  // onto the stage. Re-apply the user's visual zoom so their viewport does not
-  // unexpectedly jump back to 50%/100% while editing.
   const styleObserver = new MutationObserver(() => {
-    if (applyingZoom) return;
-    const renderedZoom = Number.parseFloat(stage.style.zoom) || 1;
-    if (Math.abs(renderedZoom - visualZoom) > 1e-10) applyVisualZoom();
+    if (!view.applyingLegacyZoomReset) resetLegacyZoom();
+    applyView();
   });
   styleObserver.observe(stage, { attributes: true, attributeFilter: ["style"] });
+
+  const localPoint = (clientX, clientY) => {
+    const rect = scroller.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const stopInertia = () => {
+    if (view.inertiaFrame) cancelAnimationFrame(view.inertiaFrame);
+    view.inertiaFrame = null;
+  };
+
+  const startInertia = () => {
+    stopInertia();
+    if (view.dragPointerType !== "touch") return;
+    if (Math.hypot(view.velocityX, view.velocityY) < INERTIA_STOP_SPEED) return;
+
+    let previous = performance.now();
+    const tick = (now) => {
+      const dt = Math.min(34, now - previous);
+      previous = now;
+      view.x += view.velocityX * dt;
+      view.y += view.velocityY * dt;
+      const friction = Math.pow(INERTIA_FRICTION, dt / 16.67);
+      view.velocityX *= friction;
+      view.velocityY *= friction;
+      applyView();
+
+      if (Math.hypot(view.velocityX, view.velocityY) >= INERTIA_STOP_SPEED) {
+        view.inertiaFrame = requestAnimationFrame(tick);
+      } else {
+        view.inertiaFrame = null;
+      }
+    };
+    view.inertiaFrame = requestAnimationFrame(tick);
+  };
+
+  const pointerPair = () => [...pointers.values()].slice(0, 2);
+
+  const beginDrag = (pointer) => {
+    stopInertia();
+    view.mode = "drag";
+    view.primaryId = pointer.id;
+    view.dragStartX = pointer.clientX;
+    view.dragStartY = pointer.clientY;
+    view.dragStartPanX = view.x;
+    view.dragStartPanY = view.y;
+    view.dragPointerType = pointer.pointerType;
+    view.dragged = false;
+    view.velocityX = 0;
+    view.velocityY = 0;
+    view.lastMoveX = pointer.clientX;
+    view.lastMoveY = pointer.clientY;
+    view.lastMoveAt = performance.now();
+    scroller.classList.add("free-pan-enabled");
+  };
+
+  const beginPinch = () => {
+    const pair = pointerPair();
+    if (pair.length < 2) return;
+    stopInertia();
+    const [a, b] = pair;
+    const centerClientX = (a.clientX + b.clientX) / 2;
+    const centerClientY = (a.clientY + b.clientY) / 2;
+    const center = localPoint(centerClientX, centerClientY);
+    const distance = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+    view.mode = "pinch";
+    view.primaryId = null;
+    view.pinchStartZoom = view.zoom;
+    view.pinchStartDistance = Math.max(distance, 1);
+    view.pinchAnchorX = (center.x - view.x) / view.zoom;
+    view.pinchAnchorY = (center.y - view.y) / view.zoom;
+    view.dragged = true;
+    scroller.classList.add("is-pinching", "free-pan-enabled");
+    scroller.classList.remove("is-panning");
+  };
+
+  const zoomAround = (nextZoom, clientX, clientY) => {
+    const next = clampZoom(nextZoom);
+    if (Math.abs(next - view.zoom) < 1e-9) return;
+    const point = localPoint(clientX, clientY);
+    const anchorX = (point.x - view.x) / view.zoom;
+    const anchorY = (point.y - view.y) / view.zoom;
+    view.zoom = next;
+    view.x = point.x - anchorX * view.zoom;
+    view.y = point.y - anchorY * view.zoom;
+    applyView();
+  };
+
+  const zoomAtViewportCenter = (factor) => {
+    const rect = scroller.getBoundingClientRect();
+    zoomAround(view.zoom * factor, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  };
+
+  const resetZoom = () => {
+    const rect = scroller.getBoundingClientRect();
+    zoomAround(1, rect.left + rect.width / 2, rect.top + rect.height / 2);
+  };
 
   scroller.addEventListener(
     "pointerdown",
@@ -80,18 +184,26 @@ if (scroller && stage) {
         return;
       }
 
-      event.preventDefault();
+      const pointer = {
+        id: event.pointerId,
+        pointerType: event.pointerType || "mouse",
+        clientX: event.clientX,
+        clientY: event.clientY,
+      };
+      pointers.set(event.pointerId, pointer);
+      stopInertia();
+
+      if (event.pointerType === "touch") event.preventDefault();
       event.stopImmediatePropagation();
 
-      panState.active = true;
-      panState.pointerId = event.pointerId;
-      panState.startClientX = event.clientX;
-      panState.startClientY = event.clientY;
-      panState.startX = panState.x;
-      panState.startY = panState.y;
+      try {
+        scroller.setPointerCapture(event.pointerId);
+      } catch {
+        // Some embedded mobile browsers can reject capture during gesture transitions.
+      }
 
-      scroller.setPointerCapture(event.pointerId);
-      scroller.classList.add("is-panning", "free-pan-enabled");
+      if (pointers.size >= 2) beginPinch();
+      else beginDrag(pointer);
     },
     true,
   );
@@ -99,39 +211,99 @@ if (scroller && stage) {
   scroller.addEventListener(
     "pointermove",
     (event) => {
-      if (!panState.active || event.pointerId !== panState.pointerId) return;
+      const pointer = pointers.get(event.pointerId);
+      if (!pointer) return;
+      pointer.clientX = event.clientX;
+      pointer.clientY = event.clientY;
 
-      event.preventDefault();
+      if (event.pointerType === "touch") event.preventDefault();
       event.stopImmediatePropagation();
 
-      panState.x = panState.startX + (event.clientX - panState.startClientX);
-      panState.y = panState.startY + (event.clientY - panState.startClientY);
-      applyPan();
+      if (pointers.size >= 2) {
+        if (view.mode !== "pinch") beginPinch();
+        const [a, b] = pointerPair();
+        if (!a || !b) return;
+        const centerClientX = (a.clientX + b.clientX) / 2;
+        const centerClientY = (a.clientY + b.clientY) / 2;
+        const center = localPoint(centerClientX, centerClientY);
+        const distance = Math.max(Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), 1);
+        view.zoom = clampZoom(view.pinchStartZoom * (distance / view.pinchStartDistance));
+        view.x = center.x - view.pinchAnchorX * view.zoom;
+        view.y = center.y - view.pinchAnchorY * view.zoom;
+        applyView();
+        return;
+      }
+
+      if (view.mode !== "drag" || view.primaryId !== event.pointerId) return;
+      const gain = view.dragPointerType === "touch" ? TOUCH_PAN_GAIN : MOUSE_PAN_GAIN;
+      const dx = (event.clientX - view.dragStartX) * gain;
+      const dy = (event.clientY - view.dragStartY) * gain;
+      if (!view.dragged && Math.hypot(dx, dy) >= DRAG_THRESHOLD) {
+        view.dragged = true;
+        scroller.classList.add("is-panning");
+      }
+
+      view.x = view.dragStartPanX + dx;
+      view.y = view.dragStartPanY + dy;
+
+      const now = performance.now();
+      const dt = Math.max(1, now - view.lastMoveAt);
+      const velocityGain = view.dragPointerType === "touch" ? TOUCH_PAN_GAIN : 1;
+      const instantVX = ((event.clientX - view.lastMoveX) * velocityGain) / dt;
+      const instantVY = ((event.clientY - view.lastMoveY) * velocityGain) / dt;
+      view.velocityX = view.velocityX * 0.55 + instantVX * 0.45;
+      view.velocityY = view.velocityY * 0.55 + instantVY * 0.45;
+      view.lastMoveX = event.clientX;
+      view.lastMoveY = event.clientY;
+      view.lastMoveAt = now;
+      applyView();
     },
     true,
   );
 
-  const stopPan = (event) => {
-    if (!panState.active || event.pointerId !== panState.pointerId) return;
+  const finishPointer = (event) => {
+    if (!pointers.has(event.pointerId)) return;
+    const wasDragging = view.mode === "drag" && view.primaryId === event.pointerId;
+    pointers.delete(event.pointerId);
 
     event.stopImmediatePropagation();
-    if (scroller.hasPointerCapture(event.pointerId)) {
-      scroller.releasePointerCapture(event.pointerId);
+    try {
+      if (scroller.hasPointerCapture(event.pointerId)) scroller.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore capture cleanup failures from mobile embedded browsers.
     }
 
-    panState.active = false;
-    panState.pointerId = null;
+    if (pointers.size >= 2) {
+      beginPinch();
+      return;
+    }
+
+    scroller.classList.remove("is-pinching");
+
+    if (pointers.size === 1) {
+      const remaining = [...pointers.values()][0];
+      beginDrag(remaining);
+      return;
+    }
+
     scroller.classList.remove("is-panning");
+    view.mode = "idle";
+    view.primaryId = null;
+    if (wasDragging && view.dragged) startInertia();
   };
 
-  scroller.addEventListener("pointerup", stopPan, true);
-  scroller.addEventListener("pointercancel", stopPan, true);
+  scroller.addEventListener("pointerup", finishPointer, true);
+  scroller.addEventListener("pointercancel", finishPointer, true);
   scroller.addEventListener(
     "lostpointercapture",
-    () => {
-      panState.active = false;
-      panState.pointerId = null;
-      scroller.classList.remove("is-panning");
+    (event) => {
+      if (!pointers.has(event.pointerId)) return;
+      pointers.delete(event.pointerId);
+      if (!pointers.size) {
+        view.mode = "idle";
+        view.primaryId = null;
+        scroller.classList.remove("is-panning", "is-pinching");
+      }
     },
     true,
   );
@@ -141,13 +313,9 @@ if (scroller && stage) {
     (event) => {
       event.preventDefault();
       event.stopImmediatePropagation();
-
-      const now = performance.now();
-      if (now - lastWheelZoomAt < 55 || event.deltaY === 0) return;
-      lastWheelZoomAt = now;
-
-      if (event.deltaY < 0) zoomIn();
-      else zoomOut();
+      if (!event.deltaY) return;
+      const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+      zoomAround(view.zoom * factor, event.clientX, event.clientY);
     },
     { capture: true, passive: false },
   );
@@ -164,10 +332,15 @@ if (scroller && stage) {
     );
   };
 
-  interceptZoomButton(zoomOutButton, zoomOut);
-  interceptZoomButton(zoomInButton, zoomIn);
+  interceptZoomButton(zoomOutButton, () => zoomAtViewportCenter(1 / 1.18));
+  interceptZoomButton(zoomInButton, () => zoomAtViewportCenter(1.18));
   interceptZoomButton(zoomResetButton, resetZoom);
 
-  applyPan();
-  applyVisualZoom();
+  window.addEventListener("resize", () => {
+    applyView();
+  });
+
+  if (canvasHint) canvasHint.textContent = "拖动画布 · 滚轮 / 双指缩放";
+  resetLegacyZoom();
+  applyView();
 }
