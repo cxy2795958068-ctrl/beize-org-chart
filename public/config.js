@@ -2,6 +2,5 @@
 window.__BEIZE_CONFIG__ = {
   SUPABASE_URL: "",
   SUPABASE_ANON_KEY: "",
-  DEFAULT_ORG_NAME: "北泽公司",
+  DEFAULT_ORG_NAME: "东莞市北泽五金制品有限公司",
 };
-
