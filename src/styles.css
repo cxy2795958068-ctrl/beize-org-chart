@@ -479,6 +479,12 @@ textarea:disabled {
   font-size: 12px;
 }
 
+.canvas-hint {
+  margin-left: 12px;
+  color: #8a92a1;
+  font-size: 11px;
+}
+
 .canvas-toolbar-actions,
 .compact-canvas-actions {
   display: flex;
@@ -523,6 +529,12 @@ textarea:disabled {
   overflow: auto;
   padding: 28px 28px 64px;
   overscroll-behavior: contain;
+  cursor: grab;
+}
+
+.tree-scroller.is-panning {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .tree-stage {
@@ -531,7 +543,6 @@ textarea:disabled {
   display: grid;
   justify-items: center;
   transform-origin: top center;
-  transition: transform 160ms ease;
 }
 
 .tree-empty {
@@ -636,8 +647,8 @@ textarea:disabled {
 }
 
 .node-card {
-  width: 174px;
-  min-height: 92px;
+  width: 184px;
+  min-height: 100px;
   margin: 0 auto;
   padding: 0;
   display: block;
@@ -694,18 +705,18 @@ textarea:disabled {
 
 .node-type {
   color: #9097a4;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
 
 .node-name {
   display: block;
-  max-width: 134px;
+  max-width: 148px;
   margin: 6px auto 0;
   overflow: hidden;
   color: #202839;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 760;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -714,11 +725,11 @@ textarea:disabled {
 
 .node-title {
   display: block;
-  max-width: 140px;
+  max-width: 154px;
   margin: 5px auto 0;
   overflow: hidden;
   color: #71798a;
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1103,6 +1114,10 @@ textarea:focus {
   .tree-scroller {
     padding: 30px 28px 70px;
   }
+
+  .canvas-hint {
+    display: none;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1189,4 +1204,3 @@ textarea:focus {
     transition-duration: 0.01ms !important;
   }
 }
-

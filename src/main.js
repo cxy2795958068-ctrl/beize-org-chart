@@ -293,7 +293,7 @@ function nodeMatches(node) {
 
 function renderTree() {
   dom.treeStage.replaceChildren();
-  dom.treeStage.style.transform = `scale(${state.zoom})`;
+  dom.treeStage.style.zoom = String(state.zoom);
   dom.zoomValue.textContent = `${Math.round(state.zoom * 100)}%`;
 
   const visible = getVisibleIds(state.nodes, state.query);
@@ -1367,6 +1367,7 @@ async function initialize() {
 }
 
 function bindEvents() {
+  let pan = null;
   const createTopLevelNode = () => {
     const company = activeNodes().find((node) => node.type === "company");
     showCreateNodeModal(company?.id ?? null);
@@ -1396,6 +1397,52 @@ function bindEvents() {
   dom.zoomOut.addEventListener("click", () => setZoom(state.zoom - 0.1));
   dom.zoomIn.addEventListener("click", () => setZoom(state.zoom + 0.1));
   dom.zoomReset.addEventListener("click", () => setZoom(1));
+  dom.treeScroller.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || event.ctrlKey || event.target.closest("button, input, select, textarea, a")) return;
+    pan = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      scrollLeft: dom.treeScroller.scrollLeft,
+      scrollTop: dom.treeScroller.scrollTop,
+    };
+    dom.treeScroller.setPointerCapture(event.pointerId);
+    dom.treeScroller.classList.add("is-panning");
+  });
+  dom.treeScroller.addEventListener("pointermove", (event) => {
+    if (!pan || event.pointerId !== pan.pointerId) return;
+    event.preventDefault();
+    dom.treeScroller.scrollLeft = pan.scrollLeft - (event.clientX - pan.clientX);
+    dom.treeScroller.scrollTop = pan.scrollTop - (event.clientY - pan.clientY);
+  });
+  const stopPanning = (event) => {
+    if (!pan || event.pointerId !== pan.pointerId) return;
+    if (dom.treeScroller.hasPointerCapture(event.pointerId)) dom.treeScroller.releasePointerCapture(event.pointerId);
+    pan = null;
+    dom.treeScroller.classList.remove("is-panning");
+  };
+  dom.treeScroller.addEventListener("pointerup", stopPanning);
+  dom.treeScroller.addEventListener("pointercancel", stopPanning);
+  dom.treeScroller.addEventListener("lostpointercapture", () => {
+    pan = null;
+    dom.treeScroller.classList.remove("is-panning");
+  });
+  dom.treeScroller.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const oldZoom = state.zoom;
+    const nextZoom = Math.max(0.5, Math.min(1.5, Math.round((oldZoom + (event.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+    if (nextZoom === oldZoom) return;
+    const rect = dom.treeScroller.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const contentX = dom.treeScroller.scrollLeft + pointerX;
+    const contentY = dom.treeScroller.scrollTop + pointerY;
+    setZoom(nextZoom);
+    const ratio = nextZoom / oldZoom;
+    dom.treeScroller.scrollLeft = contentX * ratio - pointerX;
+    dom.treeScroller.scrollTop = contentY * ratio - pointerY;
+  }, { passive: false });
   dom.modalClose.addEventListener("click", closeModal);
   dom.modalBackdrop.addEventListener("click", (event) => {
     if (event.target === dom.modalBackdrop) closeModal();
@@ -1440,4 +1487,3 @@ function setZoom(value) {
 }
 
 initialize();
-
