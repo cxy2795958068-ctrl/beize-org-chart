@@ -1,12 +1,6 @@
-// 这是可公开的浏览器端配置，不要在这里放 service_role 密钥或 GitHub Token。
+// 这是可公开的浏览器端配置。publishable key 可用于前端；不要在这里放 service_role / secret key 或 GitHub Token。
 window.__BEIZE_CONFIG__ = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: "",
+  SUPABASE_URL: "https://vsqpymisueeapuvcoyav.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_aerBnio71NYkFjasQQ7V6Q_gOZH0Cho",
   DEFAULT_ORG_NAME: "东莞市北泽五金制品有限公司",
 };
-
-// 仅执行一次：强制旧本机测试数据重新初始化为当前北泽示例架构。
-if (!localStorage.getItem("beize-org-chart:seed-fix-v1")) {
-  localStorage.removeItem("beize-org-chart:demo-seed-version");
-  localStorage.setItem("beize-org-chart:seed-fix-v1", "done");
-}
