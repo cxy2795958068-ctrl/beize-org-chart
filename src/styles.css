@@ -103,6 +103,23 @@ textarea:disabled {
   min-width: 220px;
 }
 
+.brand-logo {
+  width: 72px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.brand-logo img {
+  width: 72px;
+  height: 50px;
+  display: block;
+  object-fit: contain;
+  filter: contrast(1.08) saturate(1.06);
+}
+
 .brand-mark {
   width: 42px;
   height: 42px;
@@ -578,6 +595,10 @@ textarea:disabled {
 }
 
 .org-tree li:only-child {
+  padding-top: 26px;
+}
+
+.org-tree > li:only-child {
   padding-top: 0;
 }
 
@@ -1091,6 +1112,12 @@ textarea:focus {
   .brand-mark {
     width: 38px;
     height: 38px;
+  }
+
+  .brand-logo,
+  .brand-logo img {
+    width: 62px;
+    height: 43px;
   }
 
   .account-button {
