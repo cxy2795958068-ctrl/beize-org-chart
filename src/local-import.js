@@ -132,6 +132,19 @@ function formatDate(timestamp) {
   }).format(new Date(timestamp));
 }
 
+function contentSignature(nodes) {
+  return nodes
+    .map((node) => [
+      String(node.type ?? ""),
+      String(node.name ?? ""),
+      String(node.title ?? ""),
+      String(node.notes ?? ""),
+      String(Number.isFinite(Number(node.sort_order)) ? Number(node.sort_order) : 0),
+    ].join("\u001f"))
+    .sort()
+    .join("\u001e");
+}
+
 function ensureStyles() {
   if (document.querySelector("#local-import-styles")) return;
   const style = document.createElement("style");
@@ -260,6 +273,13 @@ function openMigrationDialog(candidates, trigger) {
   overlay.append(dialog);
   document.body.append(overlay);
 
+  let sampleRiskAcknowledged = false;
+  list.addEventListener("change", () => {
+    sampleRiskAcknowledged = false;
+    submit.textContent = "确认迁移";
+    result.hidden = true;
+  });
+
   cancel.addEventListener("click", () => closeOverlay(overlay));
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay && !submit.disabled) closeOverlay(overlay);
@@ -273,9 +293,16 @@ function openMigrationDialog(candidates, trigger) {
       return;
     }
     const candidate = candidates[Number(selected.value)];
-    if (!candidate || candidate.isSystemSample) {
+    if (!candidate) {
       result.hidden = false;
-      result.textContent = "当前选中的是系统示例候选。请再次核对；如果这不是你自己填写的架构，不要执行覆盖。";
+      result.textContent = "无法读取选中的本机架构，请关闭窗口后重新检查。";
+      return;
+    }
+    if (candidate.isSystemSample && !sampleRiskAcknowledged) {
+      sampleRiskAcknowledged = true;
+      submit.textContent = "仍然迁移这份";
+      result.hidden = false;
+      result.textContent = "这份候选和系统示例高度一致。请再次核对节点数量和根节点；如果你确认它就是你原来的数据，再点一次“仍然迁移这份”。";
       return;
     }
     if (!passwordInput.value.trim()) {
@@ -322,6 +349,21 @@ function openMigrationDialog(candidates, trigger) {
         .order("sort_order");
       if (loadError) throw loadError;
       if ((cloudNodes?.length ?? 0) !== candidate.nodes.length) throw new Error("迁移后节点数量校验失败，已停止自动完成标记");
+
+      const cloudCounts = { company: 0, department: 0, position: 0, person: 0 };
+      for (const node of cloudNodes ?? []) {
+        if (cloudCounts[node.type] !== undefined) cloudCounts[node.type] += 1;
+      }
+      for (const type of Object.keys(cloudCounts)) {
+        if (cloudCounts[type] !== candidate.counts[type]) throw new Error(`迁移后 ${type} 节点数量校验失败`);
+      }
+      const cloudRootCount = (cloudNodes ?? []).filter((node) => !node.parent_id).length;
+      if (cloudRootCount !== candidate.roots.length || Number(imported?.root_count ?? cloudRootCount) !== candidate.roots.length) {
+        throw new Error("迁移后根节点数量校验失败");
+      }
+      if (contentSignature(cloudNodes ?? []) !== contentSignature(candidate.nodes)) {
+        throw new Error("迁移后节点内容校验失败");
+      }
 
       const importedCount = Number(imported?.imported_count ?? candidate.nodes.length);
       localStorage.setItem(COMPLETED_KEY, JSON.stringify({
