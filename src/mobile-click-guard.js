@@ -1,12 +1,13 @@
 const scroller = document.querySelector("#tree-scroller");
+const stage = document.querySelector("#tree-stage");
 
 if (scroller) {
   const touches = new Map();
   let gestureHadMultiplePointers = false;
   let suppressedGesture = null;
 
-  const SUPPRESS_MS = 180;
-  const SUPPRESS_RADIUS = 42;
+  const SUPPRESS_MS = 100;
+  const SUPPRESS_RADIUS = 28;
   const isInsideCanvas = (event) => event.composedPath?.().includes(scroller) || scroller.contains(event.target);
 
   window.addEventListener(
@@ -69,4 +70,24 @@ if (scroller) {
     },
     true,
   );
+}
+
+if (stage && window.matchMedia("(max-width: 700px)").matches) {
+  let completed = false;
+  const fitInitialTree = () => {
+    if (completed) return true;
+    if (!stage.querySelector(".org-tree") || !window.BeizeCanvas?.fitToContent) return false;
+    window.BeizeCanvas.fitToContent({ force: true });
+    stage.dataset.initialFit = "done";
+    completed = true;
+    return true;
+  };
+
+  if (!fitInitialTree()) {
+    const observer = new MutationObserver(() => {
+      if (!fitInitialTree()) return;
+      observer.disconnect();
+    });
+    observer.observe(stage, { childList: true });
+  }
 }
