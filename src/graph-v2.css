@@ -21,6 +21,7 @@
   position: absolute !important;
   z-index: 2;
   margin: 0 !important;
+  overflow: visible !important;
 }
 
 .org-graph .node-card[hidden] {
@@ -52,33 +53,74 @@
   stroke: #9aa7b8;
 }
 
-.graph-connect-button.active {
-  color: #fff;
-  background: #2d5f9a;
-  border-color: #2d5f9a;
-}
-
-.org-graph.graph-connect-mode .node-card {
-  cursor: crosshair !important;
-}
-
-.org-graph.graph-connect-mode .node-card::after {
-  content: "点击选择";
+.graph-port {
+  display: none;
   position: absolute;
-  right: 12px;
-  top: 14px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: rgba(23, 36, 61, .86);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  pointer-events: none;
+  left: 50%;
+  z-index: 8;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: crosshair;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.org-graph .node-card.graph-connect-source {
-  outline: 5px solid rgba(47, 126, 207, .28);
-  box-shadow: 0 0 0 3px rgba(47, 126, 207, .18), 0 18px 38px rgba(32, 73, 118, .18);
+.graph-port::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border: 3px solid #4d86bf;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(77, 134, 191, .12);
+  transition: width .12s ease, height .12s ease, border-color .12s ease, box-shadow .12s ease, background .12s ease;
+}
+
+.graph-port-in {
+  top: -15px;
+}
+
+.graph-port-out {
+  bottom: -15px;
+}
+
+.org-graph.graph-port-editing .graph-port {
+  display: block;
+}
+
+.org-graph.graph-port-editing .graph-port:hover::before,
+.graph-port.compatible::before {
+  width: 15px;
+  height: 15px;
+  border-color: #2f7ecf;
+  box-shadow: 0 0 0 5px rgba(47, 126, 207, .16);
+}
+
+.graph-port.selected::before {
+  width: 17px;
+  height: 17px;
+  border-color: #e45151;
+  background: #fff;
+  box-shadow: 0 0 0 6px rgba(228, 81, 81, .18);
+}
+
+.graph-port.unavailable {
+  opacity: .28;
+}
+
+.graph-port.unavailable::before {
+  box-shadow: none;
 }
 
 .graph-relation-panel {
@@ -161,20 +203,13 @@
   font-size: 12px;
 }
 
-.graph-relation-actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin-top: 14px;
-}
-
 .graph-connect-tip {
   position: fixed;
   left: 50%;
   bottom: max(24px, calc(env(safe-area-inset-bottom) + 18px));
   z-index: 120;
   transform: translateX(-50%);
-  max-width: min(92vw, 520px);
+  max-width: min(92vw, 560px);
   padding: 11px 16px;
   border-radius: 999px;
   background: rgba(23, 36, 61, .94);
@@ -187,9 +222,22 @@
 }
 
 @media (max-width: 640px) {
-  .graph-connect-button {
-    min-width: 44px !important;
-    padding: 0 10px !important;
+  .graph-port {
+    width: 38px;
+    height: 38px;
+  }
+
+  .graph-port-in {
+    top: -19px;
+  }
+
+  .graph-port-out {
+    bottom: -19px;
+  }
+
+  .graph-port::before {
+    width: 13px;
+    height: 13px;
   }
 
   .graph-relation-row {
