@@ -1,17 +1,23 @@
 import { createClient } from "@supabase/supabase-js";
 import "./styles.css";
 import "./v1.css";
+import "./graph-v2.css";
 import {
   NODE_TYPES,
-  buildForest,
   countByType,
-  getDescendantIds,
-  getSearchState,
   normalizeNode,
   sortNodes,
   structureFingerprint,
   validateNodeDraft,
 } from "./core.js";
+import {
+  computeGraphSearch,
+  computeGraphVisibility,
+  getExclusiveDescendantIds,
+  layoutDag,
+  normalizeGraphEdges,
+  wouldCreateCycle as wouldCreateGraphCycle,
+} from "./graph-layout.js";
 
 const CONFIG = Object.freeze({
   supabaseUrl: String(window.__BEIZE_CONFIG__?.SUPABASE_URL ?? "").trim(),
@@ -86,9 +92,12 @@ const state = {
   client: null,
   organization: null,
   nodes: [],
+  edges: [],
   selectedId: null,
   query: "",
   collapsed: new Set(),
+  connectionPort: null,
+  connectionBusy: false,
   editing: false,
   editorName: "",
   editorToken: "",
@@ -108,13 +117,23 @@ function getClientId() {
   return id;
 }
 
-function makeClient(token = "") {
+function makeClient() {
   const options = {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
     realtime: { params: { eventsPerSecond: 10 } },
-    global: { headers: { "x-beize-client-id": getClientId() } },
+    global: {
+      fetch: (input, init = {}) => {
+        const headers = new Headers(init.headers ?? {});
+        headers.set("x-beize-client-id", getClientId());
+        if (state.editorToken) headers.set("x-beize-edit-token", state.editorToken);
+        return fetch(input, { ...init, headers });
+      },
+    },
   };
-  if (token) options.global.headers["x-beize-edit-token"] = token;
   return createClient(CONFIG.supabaseUrl, CONFIG.supabaseAnonKey, options);
 }
 
@@ -158,6 +177,8 @@ function setStatus(text, kind = "saved") {
 function friendlyError(error) {
   const message = String(error?.message ?? error ?? "操作失败");
   if (/version changed/i.test(message)) return "该节点刚被其他人修改，请刷新后再试";
+  if (/cycle/i.test(message)) return "这条连线会形成循环关系，系统已阻止";
+  if (/already|duplicate/i.test(message)) return "这两个节点已经连接";
   if (/permission|forbidden|editor/i.test(message)) return "编辑权限已失效，请重新输入密码";
   if (/network|fetch|failed to fetch/i.test(message)) return "网络不可用，请恢复网络后重试";
   if (/sensitive/i.test(message)) return "公开备注疑似包含敏感信息，请删除后再保存";
@@ -254,13 +275,14 @@ function clearEditorSession() {
   state.editorToken = "";
   state.editorExpiresAt = null;
   state.client = state.publicClient;
+  resetConnectionPort();
 }
 
 async function restoreEditorSession() {
   const stored = readStoredEditorSession();
   if (!stored) return;
-  const candidate = makeClient(stored.token);
-  const { data, error } = await candidate.rpc("verify_public_edit_session", { p_organization_id: state.organization.id });
+  state.editorToken = stored.token;
+  const { data, error } = await state.publicClient.rpc("verify_public_edit_session", { p_organization_id: state.organization.id });
   if (error || !data?.ok) {
     clearEditorSession();
     return;
@@ -269,7 +291,7 @@ async function restoreEditorSession() {
   state.editorToken = stored.token;
   state.editorName = data.editor_name || stored.editorName || "编辑者";
   state.editorExpiresAt = data.expires_at || stored.expiresAt || null;
-  state.client = candidate;
+  state.client = state.publicClient;
   storeEditorSession();
 }
 
@@ -277,11 +299,21 @@ async function loadNodes() {
   const columns = state.editing
     ? "id,organization_id,parent_id,type,name,title,notes,sort_order,version,updated_at,updated_by_label,deleted_at,deleted_batch_id,deleted_by_label"
     : "id,organization_id,parent_id,type,name,title,sort_order,version,updated_at,updated_by_label,deleted_at,deleted_batch_id,deleted_by_label";
-  let query = state.client.from("org_nodes").select(columns).eq("organization_id", state.organization.id).order("sort_order");
-  if (!state.editing) query = query.is("deleted_at", null);
-  const { data, error } = await query;
-  if (error) throw error;
-  state.nodes = (data ?? []).map(normalizeNode);
+  let nodeQuery = state.client.from("org_nodes").select(columns).eq("organization_id", state.organization.id).order("sort_order");
+  if (!state.editing) nodeQuery = nodeQuery.is("deleted_at", null);
+  const [nodesResult, edgesResult] = await Promise.all([
+    nodeQuery,
+    state.client
+      .from("org_edges")
+      .select("id,organization_id,parent_id,child_id,is_primary,sort_order")
+      .eq("organization_id", state.organization.id)
+      .order("sort_order"),
+  ]);
+  if (nodesResult.error) throw nodesResult.error;
+  if (edgesResult.error) throw edgesResult.error;
+  state.nodes = (nodesResult.data ?? []).map(normalizeNode);
+  state.edges = normalizeGraphEdges(state.nodes.filter((node) => !node.deleted_at), edgesResult.data ?? []);
+  if (state.connectionPort && !state.nodes.some((node) => !node.deleted_at && String(node.id) === state.connectionPort.nodeId)) resetConnectionPort();
   if (state.selectedId && !selectedNode()) state.selectedId = null;
 }
 
@@ -304,7 +336,15 @@ async function subscribeRealtime() {
   state.channel = state.publicClient
     .channel(`org-${state.organization.id}`)
     .on("postgres_changes", { event: "*", schema: "public", table: "org_nodes", filter: `organization_id=eq.${state.organization.id}` }, scheduleReload)
-    .subscribe();
+    .on("postgres_changes", { event: "*", schema: "public", table: "org_edges", filter: `organization_id=eq.${state.organization.id}` }, scheduleReload)
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        setStatus(state.editing ? `编辑中 · ${state.editorName}` : "云端只读 · 实时同步", "saved");
+        scheduleReload();
+      } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+        setStatus("实时同步已断开", "error");
+      }
+    });
 }
 
 function renderStats() {
@@ -320,6 +360,59 @@ function renderToolbarState() {
     if (button) button.disabled = !state.editing;
   }
   setStatus(state.editing ? `编辑中 · ${state.editorName}` : "云端只读 · 实时同步", "saved");
+}
+
+function showConnectionTip(message = "") {
+  let tip = document.querySelector("#graph-connect-tip");
+  if (!message) {
+    tip?.remove();
+    return;
+  }
+  if (!tip) {
+    tip = makeElement("div", "graph-connect-tip");
+    tip.id = "graph-connect-tip";
+    document.body.append(tip);
+  }
+  tip.textContent = message;
+}
+
+function syncConnectionPortUi() {
+  const graph = dom.treeStage.querySelector(".org-graph");
+  if (!graph) return;
+  if (!state.editing) state.connectionPort = null;
+  graph.classList.toggle("graph-port-editing", state.editing);
+  graph.querySelectorAll(".graph-port").forEach((port) => {
+    const nodeId = String(port.dataset.portNodeId ?? "");
+    const kind = String(port.dataset.portKind ?? "");
+    const selected = Boolean(state.connectionPort && state.connectionPort.nodeId === nodeId && state.connectionPort.kind === kind);
+    const compatible = Boolean(state.connectionPort && state.connectionPort.nodeId !== nodeId && state.connectionPort.kind !== kind);
+    port.classList.toggle("selected", selected);
+    port.classList.toggle("compatible", compatible);
+    port.classList.toggle("unavailable", Boolean(state.connectionPort && !selected && !compatible));
+    port.setAttribute("aria-pressed", selected ? "true" : "false");
+    port.disabled = state.connectionBusy;
+  });
+}
+
+function resetConnectionPort() {
+  state.connectionPort = null;
+  showConnectionTip();
+  syncConnectionPortUi();
+}
+
+function makeConnectionPort(node, kind) {
+  const port = makeElement("button", `graph-port graph-port-${kind}`);
+  port.type = "button";
+  port.dataset.portNodeId = String(node.id);
+  port.dataset.portKind = kind;
+  port.title = kind === "out" ? "向下连接" : "接收上级连接";
+  port.setAttribute("aria-label", `${node.name}${node.type === "person" && node.title ? ` · ${node.title}` : ""}${kind === "out" ? " 向下连接点" : " 上级连接点"}`);
+  port.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    selectConnectionPort(String(node.id), kind);
+  });
+  return port;
 }
 
 function makeNodeCard(node, hasChildren, isCollapsed, isMatch) {
@@ -349,6 +442,9 @@ function makeNodeCard(node, hasChildren, isCollapsed, isMatch) {
     card.append(toggle);
   }
 
+  card.append(makeConnectionPort(node, "out"));
+  if (node.type !== "company") card.append(makeConnectionPort(node, "in"));
+
   const select = () => {
     state.selectedId = node.id;
     renderTree();
@@ -366,60 +462,221 @@ function makeNodeCard(node, hasChildren, isCollapsed, isMatch) {
 
 function renderTree() {
   const active = activeNodes();
-  const forest = buildForest(active);
-  const search = getSearchState(active, state.query);
+  const search = computeGraphSearch(active, state.edges, state.query);
   const matchSet = new Set(search.matches);
   const querying = Boolean(state.query.trim());
-  const renderBranch = (node) => {
-    if (!search.visible.has(node.id)) return null;
-    const li = document.createElement("li");
-    const visibleChildren = node.children.filter((child) => search.visible.has(child.id));
-    const isCollapsed = !querying && state.collapsed.has(node.id);
-    li.append(makeNodeCard(node, visibleChildren.length > 0, isCollapsed, matchSet.has(node.id)));
-    if (visibleChildren.length && !isCollapsed) {
-      const ul = document.createElement("ul");
-      for (const child of visibleChildren) {
-        const branch = renderBranch(child);
-        if (branch) ul.append(branch);
-      }
-      if (ul.childElementCount) li.append(ul);
-    }
-    return li;
-  };
+  const visibleIds = querying
+    ? search.visible
+    : computeGraphVisibility(active, state.edges, state.collapsed);
+  const visibleNodes = active.filter((node) => visibleIds.has(String(node.id)));
+  const visibleEdges = state.edges.filter((edge) => visibleIds.has(String(edge.parent_id)) && visibleIds.has(String(edge.child_id)));
 
-  dom.treeStage.replaceChildren();
-  const rootList = document.createElement("ul");
-  rootList.className = "org-tree";
-  for (const root of forest) {
-    const branch = renderBranch(root);
-    if (branch) rootList.append(branch);
-  }
-  if (!rootList.childElementCount) {
+  if (!visibleNodes.length) {
     const empty = makeElement("div", "tree-empty");
     empty.append(makeElement("strong", "", state.query ? "没有找到匹配节点" : "暂无组织架构"));
     empty.append(makeElement("span", "", state.query ? "换一个关键词试试。" : "进入编辑模式后添加部门或人员。"));
-    dom.treeStage.append(empty);
-  } else dom.treeStage.append(rootList);
+    dom.treeStage.replaceChildren(empty);
+    dom.visibleCount.textContent = "0 个节点";
+    dom.filterLabel.textContent = state.query ? ` · 搜索“${state.query}”` : "";
+    return;
+  }
 
-  dom.visibleCount.textContent = `${search.visible.size} 个节点`;
+  const childCounts = new Map();
+  state.edges.forEach((edge) => childCounts.set(String(edge.parent_id), (childCounts.get(String(edge.parent_id)) ?? 0) + 1));
+  const graph = makeElement("div", "org-tree org-graph");
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("graph-edges");
+  graph.append(svg);
+  for (const node of visibleNodes) {
+    graph.append(makeNodeCard(
+      node,
+      (childCounts.get(String(node.id)) ?? 0) > 0,
+      !querying && state.collapsed.has(String(node.id)),
+      matchSet.has(String(node.id)),
+    ));
+  }
+  dom.treeStage.replaceChildren(graph);
+
+  const cards = [...graph.querySelectorAll(":scope > .node-card")];
+  const cardWidth = Math.max(...cards.map((card) => card.offsetWidth || 220));
+  const cardHeight = Math.max(...cards.map((card) => card.offsetHeight || 120));
+  const mobile = matchMedia("(max-width: 640px)").matches;
+  const layout = layoutDag(visibleNodes, visibleEdges, {
+    cardWidth,
+    cardHeight,
+    horizontalGap: mobile ? 58 : 88,
+    verticalGap: mobile ? 104 : 122,
+    padding: mobile ? 38 : 58,
+  });
+  graph.style.width = `${layout.width}px`;
+  graph.style.height = `${layout.height}px`;
+  svg.setAttribute("width", String(layout.width));
+  svg.setAttribute("height", String(layout.height));
+  svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
+
+  cards.forEach((card) => {
+    const position = layout.positions.get(String(card.dataset.nodeId));
+    if (!position) return;
+    card.style.left = `${position.x}px`;
+    card.style.top = `${position.y}px`;
+  });
+
+  visibleEdges.forEach((edge) => {
+    const parent = layout.positions.get(String(edge.parent_id));
+    const child = layout.positions.get(String(edge.child_id));
+    if (!parent || !child) return;
+    const parentX = parent.x + cardWidth / 2;
+    const parentY = parent.y + cardHeight;
+    const childX = child.x + cardWidth / 2;
+    const childY = child.y;
+    const gap = Math.max(24, childY - parentY);
+    const midpointY = parentY + Math.min(gap - 12, Math.max(34, gap * 0.48));
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.classList.add("graph-edge", edge.is_primary ? "is-primary" : "is-secondary");
+    path.setAttribute("d", `M ${parentX} ${parentY} V ${midpointY} H ${childX} V ${childY}`);
+    path.setAttribute("vector-effect", "non-scaling-stroke");
+    path.dataset.edgeId = String(edge.id);
+    svg.append(path);
+  });
+
+  dom.visibleCount.textContent = `${visibleIds.size} 个节点`;
   dom.filterLabel.textContent = state.query ? ` · 搜索“${state.query}”` : "";
+  syncConnectionPortUi();
 }
 
-function renderParentOptions(node) {
-  dom.fieldParent.replaceChildren();
-  if (node.type === "company") return;
-  const descendants = getDescendantIds(activeNodes(), node.id);
-  for (const candidate of sortNodes(activeNodes())) {
-    if (candidate.id === node.id || descendants.has(candidate.id)) continue;
-    const option = document.createElement("option");
-    option.value = candidate.id;
-    option.textContent = `${NODE_TYPES[candidate.type]} · ${candidate.name}${candidate.type === "person" && candidate.title ? `（${candidate.title}）` : ""}`;
-    if (candidate.id === node.parent_id) option.selected = true;
-    dom.fieldParent.append(option);
+function graphNodeLabel(node) {
+  if (!node) return "未知节点";
+  return `${node.name}${node.type === "person" && node.title ? ` · ${node.title}` : ""}`;
+}
+
+async function createConnection(parentId, childId) {
+  const parent = activeNodes().find((node) => String(node.id) === String(parentId));
+  const child = activeNodes().find((node) => String(node.id) === String(childId));
+  if (!parent || !child) return showToast("节点不存在，请刷新后重试");
+  if (String(parentId) === String(childId)) return showToast("不能连接到自己");
+  if (child.type === "company") return showToast("公司根节点不能设置上级");
+  if (state.edges.some((edge) => String(edge.parent_id) === String(parentId) && String(edge.child_id) === String(childId))) {
+    resetConnectionPort();
+    return showToast("这两个节点已经连接；如需断开，请在右侧“连接关系”中操作");
   }
+  if (wouldCreateGraphCycle(state.edges, parentId, childId)) {
+    resetConnectionPort();
+    return showToast("这条连线会形成循环关系，系统已阻止");
+  }
+
+  state.connectionBusy = true;
+  syncConnectionPortUi();
+  const created = await withWriteStatus(async () => {
+    const { data, error } = await state.client.rpc("create_org_edge", {
+      p_organization_id: state.organization.id,
+      p_parent_id: parentId,
+      p_child_id: childId,
+    });
+    if (error) throw error;
+    return data ?? true;
+  });
+  state.connectionBusy = false;
+  resetConnectionPort();
+  if (!created) return;
+  await loadNodes();
+  renderAll();
+  requestAnimationFrame(() => window.BeizeCanvas?.fitToContent({ force: true, maxZoom: 1 }));
+  showToast(`已连接：${parent.name} → ${child.name}`);
+}
+
+async function deleteConnection(edge) {
+  if (state.connectionBusy) return;
+  const parent = activeNodes().find((node) => String(node.id) === String(edge.parent_id));
+  const child = activeNodes().find((node) => String(node.id) === String(edge.child_id));
+  state.connectionBusy = true;
+  syncConnectionPortUi();
+  const removed = await withWriteStatus(async () => {
+    const { data, error } = await state.client.rpc("delete_org_edge", { p_edge_id: edge.id });
+    if (error) throw error;
+    return data ?? true;
+  });
+  state.connectionBusy = false;
+  resetConnectionPort();
+  if (!removed) {
+    renderInspector();
+    return;
+  }
+  await loadNodes();
+  renderAll();
+  requestAnimationFrame(() => window.BeizeCanvas?.fitToContent({ force: true, maxZoom: 1 }));
+  showToast(`已断开：${parent?.name ?? "上级"} → ${child?.name ?? "下级"}`);
+}
+
+function selectConnectionPort(nodeId, kind) {
+  if (!state.editing) return showEditDialog();
+  if (state.connectionBusy) return;
+  const current = state.connectionPort;
+  const node = activeNodes().find((item) => String(item.id) === String(nodeId));
+  if (!current) {
+    state.connectionPort = { nodeId: String(nodeId), kind };
+    syncConnectionPortUi();
+    showConnectionTip(kind === "out"
+      ? `已选：${graphNodeLabel(node)}。再点下级卡片顶部圆点`
+      : `已选：${graphNodeLabel(node)}。再点上级卡片底部圆点`);
+    return;
+  }
+  if (current.nodeId === String(nodeId) && current.kind === kind) return resetConnectionPort();
+  if (current.kind === kind) {
+    state.connectionPort = { nodeId: String(nodeId), kind };
+    syncConnectionPortUi();
+    showConnectionTip(kind === "out"
+      ? `已改选：${graphNodeLabel(node)}。现在点下级卡片顶部圆点`
+      : `已改选：${graphNodeLabel(node)}。现在点上级卡片底部圆点`);
+    return;
+  }
+  const parentId = current.kind === "out" ? current.nodeId : String(nodeId);
+  const childId = current.kind === "in" ? current.nodeId : String(nodeId);
+  void createConnection(parentId, childId);
+}
+
+function renderRelations() {
+  dom.nodeForm.querySelector("#graph-relations")?.remove();
+  const node = selectedNode();
+  if (!node) return;
+  const panel = makeElement("section", "graph-relation-panel");
+  panel.id = "graph-relations";
+  panel.append(
+    makeElement("h3", "", "连接关系"),
+    makeElement("p", "", "在编辑模式下点上级卡片底部圆点，再点下级卡片顶部圆点。上下级关系和排版会自动更新。"),
+  );
+
+  const groups = [
+    ["上级连接", state.edges.filter((edge) => String(edge.child_id) === String(node.id)), true],
+    ["下级连接", state.edges.filter((edge) => String(edge.parent_id) === String(node.id)), false],
+  ];
+  for (const [caption, edges, upstream] of groups) {
+    const group = makeElement("div", "graph-relation-group");
+    group.append(makeElement("span", "graph-relation-group-title", `${caption} · ${edges.length}`));
+    const list = makeElement("div", "graph-relation-list");
+    if (!edges.length) list.append(makeElement("div", "graph-relation-empty", "暂无连接"));
+    for (const edge of edges) {
+      const otherId = upstream ? edge.parent_id : edge.child_id;
+      const other = activeNodes().find((item) => String(item.id) === String(otherId));
+      const row = makeElement("div", "graph-relation-row");
+      row.append(makeElement("strong", "", graphNodeLabel(other)));
+      if (upstream && edge.is_primary) row.append(makeElement("span", "graph-relation-badge", "主上级"));
+      if (state.editing) {
+        const remove = makeButton("断开", "button-danger", async () => deleteConnection(edge));
+        remove.classList.add("graph-relation-remove");
+        remove.disabled = state.connectionBusy;
+        row.append(remove);
+      }
+      list.append(row);
+    }
+    group.append(list);
+    panel.append(group);
+  }
+
+  dom.nodeForm.insertBefore(panel, dom.deleteNodeButton);
 }
 
 function renderInspector() {
+  dom.nodeForm.querySelector("#graph-relations")?.remove();
   const node = selectedNode();
   if (!node) {
     dom.inspector.classList.remove("open");
@@ -435,16 +692,16 @@ function renderInspector() {
   dom.fieldName.value = node.name;
   dom.fieldTitle.value = node.title;
   dom.fieldNotes.value = node.notes || "";
-  renderParentOptions(node);
+  dom.fieldParent.replaceChildren();
 
   const company = node.type === "company";
   dom.fieldType.disabled = !state.editing || company;
   dom.fieldName.disabled = !state.editing;
   dom.fieldTitle.disabled = !state.editing || company || node.type === "department";
-  dom.fieldParent.disabled = !state.editing || company;
+  dom.fieldParent.disabled = true;
   dom.fieldNotes.disabled = !state.editing || company || node.type === "department";
   dom.fieldTitle.closest("label").classList.toggle("field-hidden", company || node.type === "department");
-  dom.fieldParent.closest("label").classList.toggle("field-hidden", company);
+  dom.fieldParent.closest("label").classList.add("field-hidden");
   dom.fieldNotes.closest("label").classList.toggle("field-hidden", company || node.type === "department" || !state.editing);
   dom.noteWarning.classList.toggle("hidden", company || node.type === "department" || !state.editing);
 
@@ -452,6 +709,7 @@ function renderInspector() {
   dom.roleMeta.textContent = state.editing ? `编辑者：${state.editorName}` : "公开只读";
   for (const button of [dom.saveNodeButton, dom.addChildButton, dom.moveUpButton, dom.moveDownButton, dom.deleteNodeButton]) button.hidden = !state.editing;
   dom.deleteNodeButton.hidden = !state.editing || company;
+  renderRelations();
 }
 
 function renderAll() {
@@ -492,7 +750,7 @@ async function saveSelectedNode() {
     name: dom.fieldName.value.trim(),
     title: type === "person" ? dom.fieldTitle.value.trim() : "",
     notes: type === "person" ? dom.fieldNotes.value.trim() : "",
-    parent_id: type === "company" ? null : (dom.fieldParent.value || null),
+    parent_id: type === "company" ? null : node.parent_id,
   };
   const errors = validateNodeDraft(draft, activeNodes(), node.id);
   if (errors.length) return showToast(errors[0]);
@@ -621,7 +879,7 @@ async function moveSelected(direction) {
 async function deleteSelected() {
   const node = selectedNode();
   if (!node || node.type === "company") return;
-  const descendants = getDescendantIds(activeNodes(), node.id).size;
+  const descendants = getExclusiveDescendantIds(activeNodes(), state.edges, node.id).size;
   const content = makeElement("div");
   content.append(makeElement("p", "modal-content-copy", descendants ? `将“${node.name}”及其 ${descendants} 个下级一起移入回收站。可在回收站恢复。` : `将“${node.name}”移入回收站。可恢复。`));
   openModal({
@@ -823,7 +1081,7 @@ async function showEditDialog(afterUnlock) {
           state.editorName = data.editor_name;
           state.editorToken = data.token;
           state.editorExpiresAt = data.expires_at;
-          state.client = makeClient(data.token);
+          state.client = state.publicClient;
           storeEditorSession();
           closeModal();
           await loadNodes();
@@ -1035,8 +1293,8 @@ function showMigrationDialog() {
 function collapseAll() {
   state.collapsed.clear();
   const childCounts = new Map();
-  for (const node of activeNodes()) if (node.parent_id) childCounts.set(node.parent_id, (childCounts.get(node.parent_id) ?? 0) + 1);
-  for (const node of activeNodes()) if (node.type !== "company" && childCounts.has(node.id)) state.collapsed.add(node.id);
+  for (const edge of state.edges) childCounts.set(String(edge.parent_id), (childCounts.get(String(edge.parent_id)) ?? 0) + 1);
+  for (const node of activeNodes()) if (node.type !== "company" && childCounts.has(String(node.id))) state.collapsed.add(String(node.id));
   renderTree();
   window.BeizeCanvas?.focusNode(companyRoot()?.id);
 }
@@ -1068,7 +1326,7 @@ function bindEvents() {
   dom.searchInput.addEventListener("input", () => {
     state.query = dom.searchInput.value;
     renderTree();
-    const { matches } = getSearchState(activeNodes(), state.query);
+    const { matches } = computeGraphSearch(activeNodes(), state.edges, state.query);
     if (matches[0]) requestAnimationFrame(() => window.BeizeCanvas?.focusNode(matches[0], { minZoom: 0.65 }));
   });
   dom.rootButton.addEventListener("click", () => window.BeizeCanvas?.focusNode(companyRoot()?.id, { minZoom: 0.75 }));
@@ -1084,6 +1342,11 @@ function bindEvents() {
     dom.offlineBanner.classList.remove("hidden");
     setStatus("离线 · 只读", "offline");
   });
+  let resizeFrame = 0;
+  window.addEventListener("resize", () => {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(renderTree);
+  });
 }
 
 async function boot() {
@@ -1098,7 +1361,9 @@ async function boot() {
   renderAll();
   prepareMigrationPrompt();
   if (!navigator.onLine) dom.offlineBanner.classList.remove("hidden");
-  if (window.matchMedia("(max-width: 700px)").matches) setTimeout(() => window.BeizeCanvas?.fitToContent(), 120);
+  if (!window.matchMedia("(max-width: 700px)").matches) {
+    setTimeout(() => window.BeizeCanvas?.focusNode(companyRoot()?.id, { minZoom: 0.58, maxZoom: 0.58 }), 80);
+  }
 }
 
 boot().catch((error) => {

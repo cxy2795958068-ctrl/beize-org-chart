@@ -1,3 +1,14 @@
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-shell {
+  height: 100vh;
+  min-height: 0;
+}
+
 .brand {
   min-width: 400px;
 }
@@ -13,6 +24,7 @@
 }
 
 .tree-scroller {
+  min-height: 0 !important;
   overflow: hidden;
   touch-action: none;
   cursor: grab;

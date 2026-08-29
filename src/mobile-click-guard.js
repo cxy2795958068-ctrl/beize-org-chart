@@ -12,11 +12,12 @@ if (scroller) {
   const SUPPRESS_RADIUS = 32;
   const isInsideCanvas = (event) => event.composedPath?.().includes(scroller) || scroller.contains(event.target);
   const nodeCardFromEvent = (event) => event.target instanceof Element ? event.target.closest(".node-card") : null;
+  const interactiveFromEvent = (event) => event.target instanceof Element ? event.target.closest("button, input, select, textarea, a") : null;
 
   window.addEventListener(
     "pointerdown",
     (event) => {
-      if ((event.pointerType === "mouse" || event.pointerType === "pen") && nodeCardFromEvent(event) && isInsideCanvas(event)) {
+      if ((event.pointerType === "mouse" || event.pointerType === "pen") && nodeCardFromEvent(event) && !interactiveFromEvent(event) && isInsideCanvas(event)) {
         event.stopPropagation();
       }
     },
@@ -26,7 +27,7 @@ if (scroller) {
   window.addEventListener(
     "pointerdown",
     (event) => {
-      if (event.pointerType !== "touch" || !isInsideCanvas(event)) return;
+      if (event.pointerType !== "touch" || !isInsideCanvas(event) || interactiveFromEvent(event)) return;
       const card = nodeCardFromEvent(event);
       touches.set(event.pointerId, {
         startX: event.clientX,
@@ -111,22 +112,21 @@ if (scroller) {
 
 if (stage && window.matchMedia("(max-width: 700px)").matches) {
   let completed = false;
-  const fitInitialTree = () => {
+  const focusInitialTree = () => {
     if (completed) return true;
-    if (!stage.querySelector(".org-tree") || !window.BeizeCanvas?.fitToContent) return false;
-    window.BeizeCanvas.fitToContent({ force: true });
+    const root = stage.querySelector(".type-company[data-node-id]");
+    if (!root || !window.BeizeCanvas?.focusNode) return false;
+    window.BeizeCanvas.focusNode(root.dataset.nodeId, { minZoom: 0.42, maxZoom: 0.42 });
     stage.dataset.initialFit = "done";
     completed = true;
     return true;
   };
 
-  if (!fitInitialTree()) {
+  if (!focusInitialTree()) {
     const observer = new MutationObserver(() => {
-      if (!fitInitialTree()) return;
+      if (!focusInitialTree()) return;
       observer.disconnect();
     });
     observer.observe(stage, { childList: true });
   }
 }
-
-import("./graph-enhancer.js");

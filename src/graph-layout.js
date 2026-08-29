@@ -114,6 +114,56 @@ export function computeGraphVisibility(nodes, edges, collapsedIds = new Set()) {
   return visible;
 }
 
+export function computeGraphSearch(nodes, edges, query = "") {
+  const text = String(query).trim().toLocaleLowerCase("zh-CN");
+  const allIds = new Set(nodes.map((node) => String(node.id)));
+  if (!text) return { visible: allIds, matches: [] };
+
+  const normalized = normalizeGraphEdges(nodes, edges);
+  const { incoming } = graphMaps(nodes, normalized);
+  const matches = [];
+  const visible = new Set();
+
+  for (const node of nodes) {
+    const haystack = `${node.name ?? ""} ${node.title ?? ""}`.toLocaleLowerCase("zh-CN");
+    if (!haystack.includes(text)) continue;
+    const id = String(node.id);
+    matches.push(id);
+    visible.add(id);
+
+    const stack = [...(incoming.get(id) ?? [])];
+    while (stack.length) {
+      const parentId = String(stack.pop());
+      if (visible.has(parentId)) continue;
+      visible.add(parentId);
+      stack.push(...(incoming.get(parentId) ?? []));
+    }
+  }
+
+  return { visible, matches };
+}
+
+export function getExclusiveDescendantIds(nodes, edges, rootId) {
+  const normalized = normalizeGraphEdges(nodes, edges);
+  const { incoming, outgoing } = graphMaps(nodes, normalized);
+  const removed = new Set([String(rootId)]);
+  const queue = [String(rootId)];
+
+  while (queue.length) {
+    const parentId = queue.shift();
+    for (const childId of outgoing.get(parentId) ?? []) {
+      if (removed.has(childId)) continue;
+      const parents = incoming.get(childId) ?? [];
+      if (!parents.length || !parents.every((id) => removed.has(id))) continue;
+      removed.add(childId);
+      queue.push(childId);
+    }
+  }
+
+  removed.delete(String(rootId));
+  return removed;
+}
+
 function barycenter(ids, neighbors, ranks) {
   const values = ids.flatMap((id) => (neighbors.get(id) ?? []).map((neighbor) => ranks.get(neighbor)).filter(Number.isFinite));
   if (!values.length) return Number.POSITIVE_INFINITY;
