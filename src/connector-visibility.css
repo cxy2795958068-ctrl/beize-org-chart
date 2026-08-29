@@ -1,0 +1,21 @@
+.tree-stage {
+  --org-connector-width: 3px;
+  --org-connector-color: #9da8b8;
+}
+
+.org-tree li::before,
+.org-tree li::after {
+  border-top-width: var(--org-connector-width);
+  border-top-color: var(--org-connector-color);
+}
+
+.org-tree li::after,
+.org-tree ul::before {
+  border-left-width: var(--org-connector-width);
+  border-left-color: var(--org-connector-color);
+}
+
+.org-tree li:last-child::before {
+  border-right-width: var(--org-connector-width);
+  border-right-color: var(--org-connector-color);
+}
