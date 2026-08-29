@@ -80,8 +80,15 @@ test("two managers can jointly manage the same department and layout stays layer
   expect(positions.gm1.top).toBe(positions.gm2.top);
   expect(positions.eng.top).toBeGreaterThan(positions.gm1.top);
   expect(Math.abs(positions.gm1.left - positions.gm2.left)).toBeGreaterThanOrEqual(positions.gm1.width);
-  await expect(page.locator(`.graph-edge[data-edge-id="20000000-0000-4000-8000-000000000003"]`)).toBeVisible();
-  await expect(page.locator(`.graph-edge[data-edge-id="20000000-0000-4000-8000-000000000004"]`)).toBeVisible();
+  const primary = page.locator(`.graph-edge[data-edge-id="20000000-0000-4000-8000-000000000003"]`);
+  const secondary = page.locator(`.graph-edge[data-edge-id="20000000-0000-4000-8000-000000000004"]`);
+  await expect(primary).toHaveCount(1);
+  await expect(secondary).toHaveCount(1);
+  expect(await primary.getAttribute("d")).toMatch(/^M /);
+  expect(await secondary.getAttribute("d")).toMatch(/^M /);
+  const stroke = await secondary.evaluate((element) => ({ width: getComputedStyle(element).strokeWidth, stroke: getComputedStyle(element).stroke }));
+  expect(parseFloat(stroke.width)).toBeGreaterThanOrEqual(3);
+  expect(stroke.stroke).not.toBe("none");
 });
 
 test("editor can manually connect first upper node then lower node", async ({ page }) => {
@@ -104,6 +111,9 @@ test("cycle and duplicate connections are blocked before write", async ({ page }
   await expect(page.locator("#toast-region")).toContainText("已经连接");
   await expect(page.locator(".graph-edge")).toHaveCount(5);
 
+  // Duplicate target keeps the selected source active so the editor can choose
+  // another child. Cancel explicitly, then start a fresh relation for cycle test.
+  await page.click("#graph-connect-button");
   await page.click("#graph-connect-button");
   await page.click(`[data-node-id="${ENG}"]`);
   await page.click(`[data-node-id="${COMPANY}"]`);
