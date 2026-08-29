@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -38,11 +38,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run tests
+      - name: Run unit tests
         run: pnpm test
 
       - name: Build site
         run: pnpm build
+
+      - name: Install browser test runner
+        run: |
+          pnpm add -D @playwright/test@1.55.0 --lockfile=false
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Run desktop and mobile browser tests three times
+        run: pnpm exec playwright test --repeat-each=3
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
@@ -63,4 +71,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
