@@ -37,6 +37,10 @@ async function boot(page, viewport) {
   await page.goto("/");
   await expect(page.locator(".node-card")).toHaveCount(3);
   await expect(page.locator("#sync-status")).toContainText("云端只读");
+  await page.waitForFunction(() => Boolean(window.BeizeCanvas));
+  if (viewport.width <= 700) {
+    await page.waitForFunction(() => document.querySelector("#tree-stage")?.dataset.initialFit === "done");
+  }
 }
 
 test("desktop viewer supports search, collapse, fit and root focus", async ({ page }) => {
@@ -63,8 +67,8 @@ test("mobile touch drag and pinch are responsive and inspector opens as a bottom
   await page.dispatchEvent("#tree-scroller", "pointermove", { pointerId: 1, pointerType: "touch", button: 0, clientX: 260, clientY: 520 });
   await page.dispatchEvent("#tree-scroller", "pointerup", { pointerId: 1, pointerType: "touch", button: 0, clientX: 260, clientY: 520 });
   const afterDrag = await page.evaluate(() => window.BeizeCanvas.getView());
-  expect(Math.abs(afterDrag.x - before.x)).toBeGreaterThan(90);
-  expect(Math.abs(afterDrag.y - before.y)).toBeGreaterThan(75);
+  expect(Math.abs(afterDrag.x - before.x)).toBeGreaterThan(100);
+  expect(Math.abs(afterDrag.y - before.y)).toBeGreaterThan(90);
 
   const zoomBefore = afterDrag.zoom;
   await page.dispatchEvent("#tree-scroller", "pointerdown", { pointerId: 11, pointerType: "touch", button: 0, clientX: 120, clientY: 420 });
@@ -76,6 +80,7 @@ test("mobile touch drag and pinch are responsive and inspector opens as a bottom
   const afterPinch = await page.evaluate(() => window.BeizeCanvas.getView());
   expect(afterPinch.zoom).toBeGreaterThan(zoomBefore);
 
+  await page.waitForTimeout(120);
   await page.click(`[data-node-id="${PERSON_ID}"]`);
   await expect(page.locator("#inspector")).toHaveClass(/open/);
   await expect(page.locator("#inspector-title")).toContainText("人员");
