@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "playwright/test";
 
 const ORG = "3edb17e6-236c-4d34-9e36-268051ca96c3";
 const COMPANY = "10000000-0000-4000-8000-000000000001";
@@ -114,7 +114,7 @@ test("editor connects two cards by clicking their connection points and relation
 
   await outPort(page, GM2).click();
   await expect(outPort(page, GM2)).toHaveClass(/selected/);
-  await expect(page.locator("#graph-connect-tip")).toContainText("再点目标节点顶部圆点");
+  await expect(page.locator("#graph-connect-tip")).toContainText("再点下级卡片顶部圆点");
   await inPort(page, SALES).click();
 
   await expect(page.locator(".graph-edge")).toHaveCount(6);
@@ -126,13 +126,23 @@ test("editor connects two cards by clicking their connection points and relation
   await expect(page.locator("#graph-relations")).toContainText("洪晓辉");
 });
 
-test("clicking the same connected pair toggles the connection off", async ({ page }) => {
+test("clicking an existing pair is non-destructive and points to explicit disconnect", async ({ page }) => {
   await boot(page);
   await unlock(page);
 
   await outPort(page, GM2).click();
   await inPort(page, ENG).click();
 
+  await expect(page.locator(".graph-edge")).toHaveCount(5);
+  await expect(page.locator("#toast-region")).toContainText("已经连接");
+});
+
+test("editor disconnects a relation explicitly from the inspector", async ({ page }) => {
+  await boot(page);
+  await unlock(page);
+  await page.locator(`[data-node-id="${ENG}"]`).click();
+  const relation = page.locator(".graph-relation-row").filter({ hasText: "洪晓辉" });
+  await relation.getByRole("button", { name: "断开" }).click();
   await expect(page.locator(".graph-edge")).toHaveCount(4);
   await expect(page.locator("#toast-region")).toContainText("已断开");
 });
@@ -158,7 +168,24 @@ test("mobile view exposes touch-sized direct connection points", async ({ page }
   expect(box.height).toBeGreaterThanOrEqual(36);
   expect(box.width).toBeGreaterThanOrEqual(36);
 
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+  await port.dispatchEvent("pointerdown", { pointerId: 31, pointerType: "touch", button: 0, clientX: centerX, clientY: centerY });
+  await port.dispatchEvent("pointerup", { pointerId: 31, pointerType: "touch", button: 0, clientX: centerX, clientY: centerY });
+  await page.waitForTimeout(30);
+  await expect(page.locator(`[data-node-id="${GM2}"]`)).not.toHaveClass(/selected/);
+
   await port.click();
   await expect(page.locator("#graph-connect-tip")).toContainText("顶部圆点");
   await expect(inPort(page, SALES)).toHaveClass(/compatible/);
+});
+
+test("viewer and editor share one client lifecycle without duplicate auth clients", async ({ page }) => {
+  const warnings = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning" || message.type() === "warn") warnings.push(message.text());
+  });
+  await boot(page);
+  await unlock(page);
+  expect(warnings.filter((message) => message.includes("Multiple GoTrueClient instances"))).toEqual([]);
 });

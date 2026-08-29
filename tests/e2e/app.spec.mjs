@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "playwright/test";
 
 const ORG_ID = "3edb17e6-236c-4d34-9e36-268051ca96c3";
 const ROOT_ID = "11111111-1111-4111-8111-111111111111";
@@ -33,6 +33,16 @@ function cloudify(nodes) {
 
 async function mockSupabase(page) {
   let serverNodes = structuredClone(baseNodes);
+  const serverEdges = () => serverNodes
+    .filter((node) => node.parent_id)
+    .map((node, index) => ({
+      id: `eeeeeeee-eeee-4eee-8eee-${String(index + 1).padStart(12, "0")}`,
+      organization_id: ORG_ID,
+      parent_id: node.parent_id,
+      child_id: node.id,
+      is_primary: true,
+      sort_order: node.sort_order,
+    }));
   await page.route("**/*.supabase.co/rest/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -41,6 +51,7 @@ async function mockSupabase(page) {
 
     if (path.endsWith("/organizations")) return json([{ id: ORG_ID, name: "东莞市北泽五金制品有限公司", is_public: true }]);
     if (path.endsWith("/org_nodes") && method === "GET") return json(serverNodes);
+    if (path.endsWith("/org_edges") && method === "GET") return json(serverEdges());
     if (path.endsWith("/rpc/begin_public_edit_session")) return json({ ok: true, token: "test-edit-token", editor_name: "测试员", expires_at: "2099-01-01T00:00:00Z" });
     if (path.endsWith("/rpc/verify_public_edit_session")) return json({ ok: true, editor_name: "测试员", expires_at: "2099-01-01T00:00:00Z" });
     if (path.endsWith("/rpc/end_public_edit_session")) return json(null);
@@ -69,6 +80,13 @@ async function boot(page, viewport) {
 
 test("desktop viewer supports search, collapse, fit and root focus", async ({ page }) => {
   await boot(page, { width: 1440, height: 900 });
+  await page.waitForFunction(() => document.querySelector("#zoom-value")?.textContent === "58%");
+  const initiallyVisible = await page.evaluate(() => {
+    const scroller = document.querySelector("#tree-scroller").getBoundingClientRect();
+    const root = document.querySelector(".type-company").getBoundingClientRect();
+    return root.top < scroller.bottom && root.bottom > scroller.top && root.left < scroller.right && root.right > scroller.left;
+  });
+  expect(initiallyVisible).toBeTruthy();
   await page.fill("#search-input", "张三");
   await expect(page.locator(".node-card.search-match .node-name")).toHaveText("张三");
   await page.fill("#search-input", "");
@@ -83,6 +101,37 @@ test("desktop viewer supports search, collapse, fit and root focus", async ({ pa
   const focused = await page.evaluate(() => window.BeizeCanvas.getView());
   expect(Number.isFinite(focused.x)).toBeTruthy();
 });
+
+for (const viewport of [
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+  { width: 997, height: 768 },
+  { width: 1366, height: 768 },
+  { width: 1510, height: 900 },
+  { width: 1920, height: 1080 },
+]) {
+  test(`responsive shell stays contained and starts on the root at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    await boot(page, viewport);
+    if (viewport.width > 700) await page.waitForFunction(() => document.querySelector("#zoom-value")?.textContent === "58%");
+    const result = await page.evaluate(() => {
+      const root = document.querySelector(".type-company").getBoundingClientRect();
+      const scroller = document.querySelector("#tree-scroller").getBoundingClientRect();
+      const toolbar = document.querySelector(".canvas-toolbar").getBoundingClientRect();
+      return {
+        bodyWidth: document.body.scrollWidth,
+        bodyHeight: document.body.scrollHeight,
+        viewportWidth: innerWidth,
+        viewportHeight: innerHeight,
+        rootVisible: root.top < scroller.bottom && root.bottom > scroller.top && root.left < scroller.right && root.right > scroller.left,
+        toolbarContained: toolbar.left >= 0 && toolbar.right <= innerWidth && toolbar.top >= 0 && toolbar.bottom <= innerHeight,
+      };
+    });
+    expect(result.bodyWidth).toBe(result.viewportWidth);
+    expect(result.bodyHeight).toBe(result.viewportHeight);
+    expect(result.rootVisible).toBeTruthy();
+    expect(result.toolbarContained).toBeTruthy();
+  });
+}
 
 test("mobile touch drag and pinch are responsive and a real touch tap opens the bottom drawer", async ({ page }) => {
   await boot(page, { width: 390, height: 844 });
