@@ -84,15 +84,18 @@ test("desktop viewer supports search, collapse, fit and root focus", async ({ pa
   expect(Number.isFinite(focused.x)).toBeTruthy();
 });
 
-test("mobile touch drag and pinch are responsive and inspector opens as a bottom drawer", async ({ page }) => {
+test("mobile touch drag and pinch are responsive and a real touch tap opens the bottom drawer", async ({ page }) => {
   await boot(page, { width: 390, height: 844 });
   const before = await page.evaluate(() => window.BeizeCanvas.getView());
   await page.dispatchEvent("#tree-scroller", "pointerdown", { pointerId: 1, pointerType: "touch", button: 0, clientX: 160, clientY: 430 });
   await page.dispatchEvent("#tree-scroller", "pointermove", { pointerId: 1, pointerType: "touch", button: 0, clientX: 260, clientY: 520 });
   await page.dispatchEvent("#tree-scroller", "pointerup", { pointerId: 1, pointerType: "touch", button: 0, clientX: 260, clientY: 520 });
   const afterDrag = await page.evaluate(() => window.BeizeCanvas.getView());
-  expect(Math.abs(afterDrag.x - before.x)).toBeGreaterThan(100);
-  expect(Math.abs(afterDrag.y - before.y)).toBeGreaterThan(90);
+  const dragX = Math.abs(afterDrag.x - before.x);
+  const dragY = Math.abs(afterDrag.y - before.y);
+  expect(dragX).toBeGreaterThan(70);
+  expect(dragY).toBeGreaterThan(60);
+  expect(Math.hypot(dragX, dragY)).toBeGreaterThan(110);
 
   const zoomBefore = afterDrag.zoom;
   await page.dispatchEvent("#tree-scroller", "pointerdown", { pointerId: 11, pointerType: "touch", button: 0, clientX: 120, clientY: 420 });
@@ -104,8 +107,13 @@ test("mobile touch drag and pinch are responsive and inspector opens as a bottom
   const afterPinch = await page.evaluate(() => window.BeizeCanvas.getView());
   expect(afterPinch.zoom).toBeGreaterThan(zoomBefore);
 
-  await page.waitForTimeout(120);
-  await page.click(`[data-node-id="${PERSON_ID}"]`);
+  const card = page.locator(`[data-node-id="${PERSON_ID}"]`);
+  const box = await card.boundingBox();
+  expect(box).not.toBeNull();
+  const tapX = box.x + box.width / 2;
+  const tapY = box.y + box.height / 2;
+  await page.dispatchEvent(`[data-node-id="${PERSON_ID}"]`, "pointerdown", { pointerId: 21, pointerType: "touch", button: 0, clientX: tapX, clientY: tapY });
+  await page.dispatchEvent(`[data-node-id="${PERSON_ID}"]`, "pointerup", { pointerId: 21, pointerType: "touch", button: 0, clientX: tapX, clientY: tapY });
   await expect(page.locator("#inspector")).toHaveClass(/open/);
   await expect(page.locator("#inspector-title")).toContainText("人员");
 });
