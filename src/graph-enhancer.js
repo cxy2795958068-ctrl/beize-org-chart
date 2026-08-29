@@ -539,6 +539,12 @@ if (enabled) {
       event.stopImmediatePropagation();
       state.collapsed.clear();
       if (graph) draw(graph);
+      return;
+    }
+
+    const card = target.closest(".node-card");
+    if (graph && card && graph.contains(card) && !target.closest("button")) {
+      setTimeout(renderRelations, 0);
     }
   }, true);
 
