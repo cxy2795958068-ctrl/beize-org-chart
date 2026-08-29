@@ -7,36 +7,22 @@ const searchInput = document.querySelector("#search-input");
 const accountButton = document.querySelector("#account-button");
 const SESSION_KEY = "beize-org-chart:editor-session:v1";
 const CLIENT_ID_KEY = "beize-org-chart:client-id:v1";
-const config = window.__BEIZE_CONFIG__ ?? {};
-const enabled = Boolean(stage && /^https:\/\/.+\.supabase\.co$/i.test(String(config.SUPABASE_URL ?? "")) && String(config.SUPABASE_ANON_KEY ?? "").length > 40);
+const cfg = window.__BEIZE_CONFIG__ ?? {};
+const enabled = Boolean(stage && /^https:\/\/.+\.supabase\.co$/i.test(String(cfg.SUPABASE_URL ?? "")) && String(cfg.SUPABASE_ANON_KEY ?? "").length > 40);
 
 if (enabled) {
-  const state = {
-    organization: null,
-    nodes: [],
-    edges: [],
-    collapsed: new Set(),
-    connectSourceId: null,
-    busy: false,
-    channel: null,
-    initialized: false,
-    pendingFit: false,
-    refreshTimer: null,
-  };
+  const state = { org: null, nodes: [], edges: [], collapsed: new Set(), source: null, busy: false, channel: null, firstLayout: true, fitNext: false, refreshTimer: 0 };
 
-  function clientId() {
+  function getClientId() {
     let id = localStorage.getItem(CLIENT_ID_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(CLIENT_ID_KEY, id);
-    }
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem(CLIENT_ID_KEY, id); }
     return id;
   }
 
   function makeClient(token = "") {
-    const headers = { "x-beize-client-id": clientId() };
+    const headers = { "x-beize-client-id": getClientId() };
     if (token) headers["x-beize-edit-token"] = token;
-    return createClient(String(config.SUPABASE_URL), String(config.SUPABASE_ANON_KEY), {
+    return createClient(String(cfg.SUPABASE_URL), String(cfg.SUPABASE_ANON_KEY), {
       auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       realtime: { params: { eventsPerSecond: 10 } },
       global: { headers },
@@ -45,24 +31,16 @@ if (enabled) {
 
   const publicClient = makeClient();
 
-  function storedEditorSession() {
+  function editorSession() {
     try {
       const value = JSON.parse(sessionStorage.getItem(SESSION_KEY));
-      if (!value?.token || !value?.organizationId || value.organizationId !== state.organization?.id) return null;
-      return value;
-    } catch {
-      return null;
-    }
+      return value?.token && value?.organizationId === state.org?.id ? value : null;
+    } catch { return null; }
   }
-
-  function editingClient() {
-    const session = storedEditorSession();
-    return session ? makeClient(session.token) : null;
-  }
-
-  function isEditing() {
-    return Boolean(storedEditorSession());
-  }
+  const isEditing = () => Boolean(editorSession());
+  const editClient = () => editorSession() ? makeClient(editorSession().token) : null;
+  const nodeById = (id) => state.nodes.find((node) => String(node.id) === String(id)) ?? null;
+  const label = (node) => node ? `${node.name}${node.type === "person" && node.title ? ` · ${node.title}` : ""}` : "未知节点";
 
   function toast(message) {
     const region = document.querySelector("#toast-region");
@@ -74,69 +52,14 @@ if (enabled) {
     setTimeout(() => item.remove(), 4200);
   }
 
-  function nodeLabel(node) {
-    if (!node) return "未知节点";
-    return `${node.name}${node.type === "person" && node.title ? ` · ${node.title}` : ""}`;
+  function tip(message = "") {
+    let el = document.querySelector("#graph-connect-tip");
+    if (!message) { el?.remove(); return; }
+    if (!el) { el = document.createElement("div"); el.id = "graph-connect-tip"; el.className = "graph-connect-tip"; document.body.append(el); }
+    el.textContent = message;
   }
 
-  function nodeById(id) {
-    return state.nodes.find((node) => String(node.id) === String(id)) ?? null;
-  }
-
-  function showConnectTip(text) {
-    let tip = document.querySelector("#graph-connect-tip");
-    if (!text) {
-      tip?.remove();
-      return;
-    }
-    if (!tip) {
-      tip = document.createElement("div");
-      tip.id = "graph-connect-tip";
-      tip.className = "graph-connect-tip";
-      document.body.append(tip);
-    }
-    tip.textContent = text;
-  }
-
-  function syncConnectButton() {
-    const button = document.querySelector("#graph-connect-button");
-    if (!button) return;
-    const active = Boolean(state.connectSourceId);
-    button.classList.toggle("active", active);
-    button.textContent = active ? "取消连线" : "＋ 连线";
-    button.title = active ? "取消当前连线" : "先点上级节点，再点下级节点";
-  }
-
-  function cancelConnect() {
-    state.connectSourceId = null;
-    showConnectTip("");
-    syncConnectButton();
-    stage.querySelectorAll(".graph-connect-source").forEach((card) => card.classList.remove("graph-connect-source"));
-    stage.querySelector(".org-graph")?.classList.remove("graph-connect-mode");
-  }
-
-  function startConnect(sourceId = null) {
-    if (!isEditing()) {
-      toast("请先点右上角“编辑”并输入密码，解锁后再连线");
-      accountButton?.click();
-      return;
-    }
-    if (state.connectSourceId) {
-      cancelConnect();
-      return;
-    }
-    state.connectSourceId = sourceId ? String(sourceId) : "__waiting_source__";
-    syncConnectButton();
-    stage.querySelector(".org-graph")?.classList.add("graph-connect-mode");
-    if (sourceId) {
-      stage.querySelector(`[data-node-id="${CSS.escape(String(sourceId))}"]`)?.classList.add("graph-connect-source");
-      showConnectTip(`上级已选择：${nodeLabel(nodeById(sourceId))}。现在点需要连接的下级节点`);
-    } else {
-      showConnectTip("连线模式：先点一个上级节点，再点一个下级节点");
-    }
-  }
-
-  function ensureToolbarButton() {
+  function ensureConnectButton() {
     if (document.querySelector("#graph-connect-button")) return;
     const host = document.querySelector(".canvas-toolbar-secondary") ?? document.querySelector(".canvas-toolbar-actions");
     if (!host) return;
@@ -144,66 +67,79 @@ if (enabled) {
     button.id = "graph-connect-button";
     button.type = "button";
     button.className = "button button-ghost graph-connect-button";
-    button.textContent = "＋ 连线";
-    button.title = "先点上级节点，再点下级节点";
-    button.addEventListener("click", () => startConnect());
+    button.addEventListener("click", () => state.source ? cancelConnect() : beginConnect());
     host.prepend(button);
+    syncConnectUi();
   }
 
-  async function refreshData({ fit = false } = {}) {
-    if (!state.organization) {
-      const { data: organization, error } = await publicClient
-        .from("organizations")
-        .select("id,name,is_public")
-        .eq("is_public", true)
-        .order("created_at")
-        .limit(1)
-        .maybeSingle();
-      if (error || !organization) throw error ?? new Error("未找到公开组织");
-      state.organization = organization;
+  function syncConnectUi() {
+    const button = document.querySelector("#graph-connect-button");
+    if (button) {
+      button.textContent = state.source ? "取消连线" : "＋ 连线";
+      button.classList.toggle("active", Boolean(state.source));
+      button.title = state.source ? "取消当前连线" : "先点上级节点，再点下级节点";
     }
+    const graph = stage.querySelector(".org-graph");
+    graph?.classList.toggle("graph-connect-mode", Boolean(state.source));
+    graph?.querySelectorAll(".node-card").forEach((card) => card.classList.toggle("graph-connect-source", state.source !== "__pick_source__" && String(card.dataset.nodeId) === String(state.source)));
+  }
 
-    const [{ data: nodes, error: nodeError }, { data: edges, error: edgeError }] = await Promise.all([
-      publicClient.from("org_nodes").select("id,organization_id,parent_id,type,name,title,sort_order,deleted_at").eq("organization_id", state.organization.id).is("deleted_at", null).order("sort_order"),
-      publicClient.from("org_edges").select("id,organization_id,parent_id,child_id,is_primary,sort_order").eq("organization_id", state.organization.id).order("sort_order"),
+  function beginConnect(sourceId = null) {
+    if (!isEditing()) {
+      toast("请先点右上角“编辑”解锁，再进行连线");
+      accountButton?.click();
+      return;
+    }
+    state.source = sourceId ? String(sourceId) : "__pick_source__";
+    syncConnectUi();
+    tip(sourceId ? `上级已选择：${label(nodeById(sourceId))}。现在点下级节点` : "连线模式：先点上级节点，再点下级节点");
+  }
+
+  function cancelConnect() {
+    state.source = null;
+    tip();
+    syncConnectUi();
+  }
+
+  async function loadData({ fit = false } = {}) {
+    if (!state.org) {
+      const { data, error } = await publicClient.from("organizations").select("id,name,is_public").eq("is_public", true).order("created_at").limit(1).maybeSingle();
+      if (error || !data) throw error ?? new Error("未找到公开组织");
+      state.org = data;
+    }
+    const [nodesResult, edgesResult] = await Promise.all([
+      publicClient.from("org_nodes").select("id,organization_id,parent_id,type,name,title,sort_order,deleted_at").eq("organization_id", state.org.id).is("deleted_at", null).order("sort_order"),
+      publicClient.from("org_edges").select("id,organization_id,parent_id,child_id,is_primary,sort_order").eq("organization_id", state.org.id).order("sort_order"),
     ]);
-    if (nodeError) throw nodeError;
-    if (edgeError) throw edgeError;
-    state.nodes = nodes ?? [];
-    state.edges = normalizeGraphEdges(state.nodes, edges ?? []);
-    if (fit) state.pendingFit = true;
+    if (nodesResult.error) throw nodesResult.error;
+    if (edgesResult.error) throw edgesResult.error;
+    state.nodes = nodesResult.data ?? [];
+    state.edges = normalizeGraphEdges(state.nodes, edgesResult.data ?? []);
+    state.fitNext ||= fit;
     scheduleEnhance();
-    renderRelationPanel();
+    renderRelations();
   }
 
   function scheduleRefresh(options = {}) {
     clearTimeout(state.refreshTimer);
-    state.refreshTimer = setTimeout(() => refreshData(options).catch((error) => toast(error?.message ?? "连接关系同步失败")), 120);
+    state.refreshTimer = setTimeout(() => loadData(options).catch((error) => toast(error?.message ?? "连接关系同步失败")), 120);
   }
 
   async function subscribe() {
-    if (!state.organization) return;
+    if (!state.org) return;
     if (state.channel) await publicClient.removeChannel(state.channel);
-    state.channel = publicClient
-      .channel(`org-graph-${state.organization.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "org_edges", filter: `organization_id=eq.${state.organization.id}` }, () => scheduleRefresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "org_nodes", filter: `organization_id=eq.${state.organization.id}` }, () => scheduleRefresh())
+    state.channel = publicClient.channel(`org-graph-${state.org.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "org_edges", filter: `organization_id=eq.${state.org.id}` }, () => scheduleRefresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "org_nodes", filter: `organization_id=eq.${state.org.id}` }, () => scheduleRefresh())
       .subscribe();
   }
 
-  function graphVisibleNodes(cardIds) {
-    const available = new Set(cardIds);
-    const queryActive = Boolean(searchInput?.value.trim());
-    const graphVisible = queryActive ? new Set(state.nodes.map((node) => String(node.id))) : computeGraphVisibility(state.nodes, state.edges, state.collapsed);
-    return state.nodes.filter((node) => available.has(String(node.id)) && graphVisible.has(String(node.id)));
-  }
-
   function ensureCollapseButtons(graph) {
-    const outgoingCount = new Map();
-    for (const edge of state.edges) outgoingCount.set(String(edge.parent_id), (outgoingCount.get(String(edge.parent_id)) ?? 0) + 1);
-    for (const card of graph.querySelectorAll(".node-card")) {
-      const id = String(card.dataset.nodeId ?? "");
-      const hasChildren = (outgoingCount.get(id) ?? 0) > 0;
+    const counts = new Map();
+    state.edges.forEach((edge) => counts.set(String(edge.parent_id), (counts.get(String(edge.parent_id)) ?? 0) + 1));
+    graph.querySelectorAll(".node-card").forEach((card) => {
+      const id = String(card.dataset.nodeId);
+      const hasChildren = (counts.get(id) ?? 0) > 0;
       let button = card.querySelector(".node-collapse-action");
       if (hasChildren && !button) {
         button = document.createElement("button");
@@ -212,42 +148,30 @@ if (enabled) {
         card.append(button);
       }
       if (!hasChildren && button?.classList.contains("graph-generated-collapse")) button.remove();
-      if (button && hasChildren) {
-        const collapsed = state.collapsed.has(id);
-        button.textContent = collapsed ? "展开" : "收起";
-        button.setAttribute("aria-label", collapsed ? "展开下级" : "收起下级");
-      }
-    }
+      if (button && hasChildren) button.textContent = state.collapsed.has(id) ? "展开" : "收起";
+    });
   }
 
-  function drawGraph(graph) {
+  function draw(graph) {
     const cards = [...graph.querySelectorAll(":scope > .node-card")];
     if (!cards.length) return;
-    const cardIds = cards.map((card) => String(card.dataset.nodeId));
-    const known = new Set(state.nodes.map((node) => String(node.id)));
-    if (cardIds.some((id) => !known.has(id))) {
-      scheduleRefresh();
-      return;
-    }
+    const knownIds = new Set(state.nodes.map((node) => String(node.id)));
+    if (cards.some((card) => !knownIds.has(String(card.dataset.nodeId)))) return scheduleRefresh();
 
     ensureCollapseButtons(graph);
-    const visibleNodes = graphVisibleNodes(cardIds);
+    const cardIds = new Set(cards.map((card) => String(card.dataset.nodeId)));
+    const visibleGraph = searchInput?.value.trim() ? new Set(state.nodes.map((node) => String(node.id))) : computeGraphVisibility(state.nodes, state.edges, state.collapsed);
+    const visibleNodes = state.nodes.filter((node) => cardIds.has(String(node.id)) && visibleGraph.has(String(node.id)));
     const visibleIds = new Set(visibleNodes.map((node) => String(node.id)));
-    for (const card of cards) card.hidden = !visibleIds.has(String(card.dataset.nodeId));
+    cards.forEach((card) => { card.hidden = !visibleIds.has(String(card.dataset.nodeId)); });
     const visibleCards = cards.filter((card) => !card.hidden);
     if (!visibleCards.length) return;
 
     const cardWidth = Math.max(...visibleCards.map((card) => card.offsetWidth || 380));
     const cardHeight = Math.max(...visibleCards.map((card) => card.offsetHeight || 240));
-    const mobile = window.matchMedia("(max-width: 640px)").matches;
+    const mobile = matchMedia("(max-width: 640px)").matches;
     const visibleEdges = state.edges.filter((edge) => visibleIds.has(String(edge.parent_id)) && visibleIds.has(String(edge.child_id)));
-    const layout = layoutDag(visibleNodes, visibleEdges, {
-      cardWidth,
-      cardHeight,
-      horizontalGap: mobile ? 58 : 88,
-      verticalGap: mobile ? 104 : 122,
-      padding: mobile ? 38 : 58,
-    });
+    const layout = layoutDag(visibleNodes, visibleEdges, { cardWidth, cardHeight, horizontalGap: mobile ? 58 : 88, verticalGap: mobile ? 104 : 122, padding: mobile ? 38 : 58 });
 
     graph.style.width = `${layout.width}px`;
     graph.style.height = `${layout.height}px`;
@@ -262,283 +186,185 @@ if (enabled) {
     svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
     svg.replaceChildren();
 
-    for (const card of visibleCards) {
-      const position = layout.positions.get(String(card.dataset.nodeId));
-      if (!position) continue;
-      card.style.left = `${position.x}px`;
-      card.style.top = `${position.y}px`;
-      card.classList.toggle("graph-connect-source", String(card.dataset.nodeId) === String(state.connectSourceId));
-    }
+    visibleCards.forEach((card) => {
+      const pos = layout.positions.get(String(card.dataset.nodeId));
+      if (!pos) return;
+      card.style.left = `${pos.x}px`;
+      card.style.top = `${pos.y}px`;
+    });
 
-    for (const edge of visibleEdges) {
-      const parent = layout.positions.get(String(edge.parent_id));
-      const child = layout.positions.get(String(edge.child_id));
-      if (!parent || !child) continue;
-      const px = parent.x + cardWidth / 2;
-      const py = parent.y + cardHeight;
-      const cx = child.x + cardWidth / 2;
-      const cy = child.y;
-      const distance = Math.max(24, cy - py);
-      const midY = py + Math.min(distance - 12, Math.max(34, distance * 0.48));
+    visibleEdges.forEach((edge) => {
+      const p = layout.positions.get(String(edge.parent_id));
+      const c = layout.positions.get(String(edge.child_id));
+      if (!p || !c) return;
+      const px = p.x + cardWidth / 2, py = p.y + cardHeight, cx = c.x + cardWidth / 2, cy = c.y;
+      const gap = Math.max(24, cy - py);
+      const midY = py + Math.min(gap - 12, Math.max(34, gap * 0.48));
       const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
       path.classList.add("graph-edge", edge.is_primary ? "is-primary" : "is-secondary");
       path.setAttribute("d", `M ${px} ${py} V ${midY} H ${cx} V ${cy}`);
       path.setAttribute("vector-effect", "non-scaling-stroke");
       path.dataset.edgeId = String(edge.id);
       svg.append(path);
-    }
+    });
 
-    graph.classList.toggle("graph-connect-mode", Boolean(state.connectSourceId));
-    if (state.pendingFit) {
-      state.pendingFit = false;
+    syncConnectUi();
+    if (state.firstLayout || state.fitNext) {
+      state.firstLayout = false;
+      state.fitNext = false;
       requestAnimationFrame(() => window.BeizeCanvas?.fitToContent({ force: true, maxZoom: 1 }));
     }
   }
 
-  function enhanceTree() {
-    ensureToolbarButton();
+  function enhance() {
+    ensureConnectButton();
     let graph = stage.querySelector(":scope > .org-graph");
     if (!graph) {
-      const legacyTree = stage.querySelector(":scope > .org-tree");
-      if (!legacyTree) {
-        renderRelationPanel();
-        return;
-      }
-      const cards = [...legacyTree.querySelectorAll(".node-card")];
+      const tree = stage.querySelector(":scope > .org-tree");
+      if (!tree) return renderRelations();
+      const cards = [...tree.querySelectorAll(".node-card")];
       if (!cards.length) return;
-      const known = new Set(state.nodes.map((node) => String(node.id)));
-      if (cards.some((card) => !known.has(String(card.dataset.nodeId)))) {
-        scheduleRefresh();
-        return;
-      }
+      const knownIds = new Set(state.nodes.map((node) => String(node.id)));
+      if (cards.some((card) => !knownIds.has(String(card.dataset.nodeId)))) return scheduleRefresh();
       graph = document.createElement("div");
       graph.className = "org-tree org-graph";
-      for (const card of cards) graph.append(card);
+      cards.forEach((card) => graph.append(card));
       stage.replaceChildren(graph);
-      if (!state.initialized) {
-        state.initialized = true;
-        state.pendingFit = true;
-      }
     }
-    drawGraph(graph);
-    renderRelationPanel();
+    draw(graph);
+    renderRelations();
   }
 
-  let enhanceFrame = 0;
-  function scheduleEnhance() {
-    cancelAnimationFrame(enhanceFrame);
-    enhanceFrame = requestAnimationFrame(enhanceTree);
-  }
+  let frame = 0;
+  function scheduleEnhance() { cancelAnimationFrame(frame); frame = requestAnimationFrame(enhance); }
+  const selectedId = () => stage.querySelector(".node-card.selected")?.dataset.nodeId ?? null;
 
-  function selectedId() {
-    return stage.querySelector(".node-card.selected")?.dataset.nodeId ?? null;
-  }
-
-  function relationRow(edge, otherNode, direction) {
+  function relationRow(edge, otherNode, upstream) {
     const row = document.createElement("div");
     row.className = "graph-relation-row";
-    const label = document.createElement("strong");
-    label.textContent = nodeLabel(otherNode);
-    row.append(label);
-    if (edge.is_primary && direction === "up") {
-      const badge = document.createElement("span");
-      badge.className = "graph-relation-badge";
-      badge.textContent = "主上级";
-      row.append(badge);
+    const text = document.createElement("strong");
+    text.textContent = label(otherNode);
+    row.append(text);
+    if (upstream && edge.is_primary) {
+      const badge = document.createElement("span"); badge.className = "graph-relation-badge"; badge.textContent = "主上级"; row.append(badge);
     }
     if (isEditing()) {
       const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "button button-danger graph-relation-remove";
-      remove.textContent = "断开";
+      remove.type = "button"; remove.className = "button button-danger graph-relation-remove"; remove.textContent = "断开";
       remove.addEventListener("click", async () => {
         if (state.busy) return;
-        const client = editingClient();
+        const client = editClient();
         if (!client) return toast("编辑权限已失效，请重新解锁");
-        state.busy = true;
-        remove.disabled = true;
+        state.busy = true; remove.disabled = true;
         const { error } = await client.rpc("delete_org_edge", { p_edge_id: edge.id });
         state.busy = false;
-        if (error) {
-          remove.disabled = false;
-          return toast(error.message ?? "断开连接失败");
-        }
+        if (error) { remove.disabled = false; return toast(error.message ?? "断开连接失败"); }
         toast("连接已断开");
-        await refreshData({ fit: true });
+        await loadData({ fit: true });
       });
       row.append(remove);
     }
     return row;
   }
 
-  function renderRelationPanel() {
+  function renderRelations() {
     const form = document.querySelector("#node-form");
     if (!form) return;
     form.querySelector("#graph-relations")?.remove();
     const id = selectedId();
-    if (!id) return;
-    const node = nodeById(id);
-    if (!node) return;
-
+    if (!id || !nodeById(id)) return;
     const parentLabel = document.querySelector("#field-parent")?.closest("label")?.querySelector("span");
     if (parentLabel) parentLabel.textContent = "主要上级（布局参考）";
 
-    const panel = document.createElement("section");
-    panel.id = "graph-relations";
-    panel.className = "graph-relation-panel";
-    const title = document.createElement("h3");
-    title.textContent = "连接关系";
-    const help = document.createElement("p");
-    help.textContent = "一个节点可以有多个上级。主上级用于兼容和排序，其他连线同样有效。";
-    panel.append(title, help);
-
-    const upstream = state.edges.filter((edge) => String(edge.child_id) === String(id));
-    const downstream = state.edges.filter((edge) => String(edge.parent_id) === String(id));
-    for (const [caption, list, direction] of [["上级连接", upstream, "up"], ["下级连接", downstream, "down"]]) {
-      const group = document.createElement("div");
-      group.className = "graph-relation-group";
-      const groupTitle = document.createElement("span");
-      groupTitle.className = "graph-relation-group-title";
-      groupTitle.textContent = `${caption} · ${list.length}`;
-      group.append(groupTitle);
-      const rows = document.createElement("div");
-      rows.className = "graph-relation-list";
-      if (!list.length) {
-        const empty = document.createElement("div");
-        empty.className = "graph-relation-empty";
-        empty.textContent = "暂无连接";
-        rows.append(empty);
-      } else {
-        for (const edge of list) {
-          const otherId = direction === "up" ? edge.parent_id : edge.child_id;
-          rows.append(relationRow(edge, nodeById(otherId), direction));
-        }
-      }
-      group.append(rows);
-      panel.append(group);
+    const panel = document.createElement("section"); panel.id = "graph-relations"; panel.className = "graph-relation-panel";
+    const h = document.createElement("h3"); h.textContent = "连接关系";
+    const help = document.createElement("p"); help.textContent = "可同时连接多个上级。主上级只用于兼容和排序，其他连线同样有效。";
+    panel.append(h, help);
+    const groups = [
+      ["上级连接", state.edges.filter((edge) => String(edge.child_id) === String(id)), true],
+      ["下级连接", state.edges.filter((edge) => String(edge.parent_id) === String(id)), false],
+    ];
+    groups.forEach(([caption, list, upstream]) => {
+      const group = document.createElement("div"); group.className = "graph-relation-group";
+      const title = document.createElement("span"); title.className = "graph-relation-group-title"; title.textContent = `${caption} · ${list.length}`; group.append(title);
+      const rows = document.createElement("div"); rows.className = "graph-relation-list";
+      if (!list.length) { const empty = document.createElement("div"); empty.className = "graph-relation-empty"; empty.textContent = "暂无连接"; rows.append(empty); }
+      list.forEach((edge) => rows.append(relationRow(edge, nodeById(upstream ? edge.parent_id : edge.child_id), upstream)));
+      group.append(rows); panel.append(group);
+    });
+    if (isEditing()) {
+      const actions = document.createElement("div"); actions.className = "graph-relation-actions";
+      const start = document.createElement("button"); start.type = "button"; start.className = "button button-primary"; start.textContent = "从此节点开始连线"; start.addEventListener("click", () => beginConnect(id));
+      actions.append(start); panel.append(actions);
     }
-
-    if (isEditing() && node.type !== "company") {
-      const actions = document.createElement("div");
-      actions.className = "graph-relation-actions";
-      const asParent = document.createElement("button");
-      asParent.type = "button";
-      asParent.className = "button button-primary";
-      asParent.textContent = "从此节点开始连线";
-      asParent.addEventListener("click", () => startConnect(id));
-      actions.append(asParent);
-      panel.append(actions);
-    } else if (isEditing() && node.type === "company") {
-      const actions = document.createElement("div");
-      actions.className = "graph-relation-actions";
-      const asParent = document.createElement("button");
-      asParent.type = "button";
-      asParent.className = "button button-primary";
-      asParent.textContent = "从公司开始连线";
-      asParent.addEventListener("click", () => startConnect(id));
-      actions.append(asParent);
-      panel.append(actions);
-    }
-
     const deleteButton = document.querySelector("#delete-node-button");
-    if (deleteButton?.parentElement === form) form.insertBefore(panel, deleteButton);
-    else form.append(panel);
+    deleteButton?.parentElement === form ? form.insertBefore(panel, deleteButton) : form.append(panel);
   }
 
   async function createConnection(parentId, childId) {
-    const parent = nodeById(parentId);
-    const child = nodeById(childId);
+    const parent = nodeById(parentId), child = nodeById(childId);
     if (!parent || !child) return toast("节点不存在，请刷新后重试");
-    if (parentId === childId) return toast("不能把节点连接到自己");
+    if (parentId === childId) return toast("不能连接到自己");
     if (child.type === "company") return toast("公司根节点不能设置上级");
-    if (state.edges.some((edge) => String(edge.parent_id) === String(parentId) && String(edge.child_id) === String(childId))) return toast("这两个节点已经连接");
+    if (state.edges.some((edge) => String(edge.parent_id) === parentId && String(edge.child_id) === childId)) return toast("这两个节点已经连接");
     if (wouldCreateCycle(state.edges, parentId, childId)) return toast("这条连线会形成循环关系，系统已阻止");
-    const client = editingClient();
-    if (!client) {
-      cancelConnect();
-      toast("编辑权限已失效，请重新解锁");
-      return accountButton?.click();
-    }
+    const client = editClient();
+    if (!client) { cancelConnect(); toast("编辑权限已失效，请重新解锁"); return accountButton?.click(); }
     state.busy = true;
-    const { error } = await client.rpc("create_org_edge", {
-      p_organization_id: state.organization.id,
-      p_parent_id: parentId,
-      p_child_id: childId,
-    });
+    const { error } = await client.rpc("create_org_edge", { p_organization_id: state.org.id, p_parent_id: parentId, p_child_id: childId });
     state.busy = false;
-    if (error) {
-      const message = /cycle/i.test(error.message ?? "") ? "这条连线会形成循环关系，系统已阻止" : /already|duplicate/i.test(error.message ?? "") ? "这两个节点已经连接" : (error.message ?? "创建连接失败");
-      return toast(message);
-    }
+    if (error) return toast(/cycle/i.test(error.message ?? "") ? "这条连线会形成循环关系，系统已阻止" : /already|duplicate/i.test(error.message ?? "") ? "这两个节点已经连接" : (error.message ?? "创建连接失败"));
     cancelConnect();
     toast(`已连接：${parent.name} → ${child.name}`);
-    await refreshData({ fit: true });
+    await loadData({ fit: true });
   }
 
   window.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
-
     const graph = stage.querySelector(".org-graph");
     const card = target.closest(".node-card");
-    if (graph && card && graph.contains(card) && state.connectSourceId && !target.closest("button")) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+    if (graph && card && graph.contains(card) && state.source && !target.closest("button")) {
+      event.preventDefault(); event.stopImmediatePropagation();
       if (state.busy) return;
       const id = String(card.dataset.nodeId);
-      if (state.connectSourceId === "__waiting_source__") {
-        state.connectSourceId = id;
-        card.classList.add("graph-connect-source");
-        showConnectTip(`上级已选择：${nodeLabel(nodeById(id))}。现在点需要连接的下级节点`);
-        syncConnectButton();
-        return;
+      if (state.source === "__pick_source__") {
+        state.source = id; syncConnectUi(); tip(`上级已选择：${label(nodeById(id))}。现在点下级节点`); return;
       }
-      if (id === String(state.connectSourceId)) return toast("请选择另一个节点作为下级");
-      createConnection(String(state.connectSourceId), id);
-      return;
+      if (id === String(state.source)) return toast("请选择另一个节点作为下级");
+      createConnection(String(state.source), id); return;
     }
-
     const collapse = target.closest(".node-collapse-action");
     if (graph && collapse && graph.contains(collapse)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
+      event.preventDefault(); event.stopImmediatePropagation();
       const id = String(collapse.closest(".node-card")?.dataset.nodeId ?? "");
       if (!id) return;
-      if (state.collapsed.has(id)) state.collapsed.delete(id); else state.collapsed.add(id);
-      drawGraph(graph);
-      return;
+      state.collapsed.has(id) ? state.collapsed.delete(id) : state.collapsed.add(id);
+      draw(graph); return;
     }
-
     if (target.closest("#collapse-all-button")) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      for (const edge of state.edges) state.collapsed.add(String(edge.parent_id));
-      if (graph) drawGraph(graph);
-      return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      state.edges.forEach((edge) => state.collapsed.add(String(edge.parent_id)));
+      if (graph) draw(graph); return;
     }
     if (target.closest("#expand-all-button")) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      state.collapsed.clear();
-      if (graph) drawGraph(graph);
+      event.preventDefault(); event.stopImmediatePropagation();
+      state.collapsed.clear(); if (graph) draw(graph);
     }
   }, true);
 
-  const observer = new MutationObserver(() => scheduleEnhance());
-  observer.observe(stage, { childList: true, subtree: true });
-  const accountObserver = new MutationObserver(() => {
-    syncConnectButton();
-    renderRelationPanel();
-  });
-  if (accountButton) accountObserver.observe(accountButton, { attributes: true, childList: true, subtree: true });
-  window.addEventListener("resize", scheduleEnhance);
+  // Only direct stage child replacement means the main app rebuilt the tree.
+  // Observing the whole subtree would retrigger on every SVG path redraw.
+  new MutationObserver(scheduleEnhance).observe(stage, { childList: true });
+  if (accountButton) new MutationObserver(() => { syncConnectUi(); renderRelations(); }).observe(accountButton, { attributes: true, childList: true, subtree: true });
+  addEventListener("resize", scheduleEnhance);
   searchInput?.addEventListener("input", () => setTimeout(scheduleEnhance, 0));
 
   (async () => {
     try {
-      await refreshData();
+      await loadData();
       await subscribe();
-      ensureToolbarButton();
+      ensureConnectButton();
       scheduleEnhance();
     } catch (error) {
       console.error("Graph enhancement failed", error);
