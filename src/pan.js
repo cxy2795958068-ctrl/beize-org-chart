@@ -61,6 +61,7 @@ if (scroller && stage) {
     stage.style.setProperty("--pan-x", `${view.x}px`);
     stage.style.setProperty("--pan-y", `${view.y}px`);
     stage.style.setProperty("--visual-zoom", String(view.zoom));
+    stage.style.setProperty("--inverse-visual-zoom", String(1 / view.zoom));
     if (zoomValue) zoomValue.textContent = formatZoom(view.zoom);
   };
 
