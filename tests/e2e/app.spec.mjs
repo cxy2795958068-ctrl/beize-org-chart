@@ -11,21 +11,47 @@ const baseNodes = [
   { id: PERSON_ID, organization_id: ORG_ID, parent_id: DEPT_ID, type: "person", name: "张三", title: "QE", notes: "公开职责", sort_order: 10, version: 1, updated_at: "2026-08-29T00:00:00Z", updated_by_label: "程兴宇", deleted_at: null, deleted_batch_id: null, deleted_by_label: null },
 ];
 
+function cloudify(nodes) {
+  const idMap = new Map(nodes.map((node, index) => [String(node.id), `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, "0")}`]));
+  return nodes.map((node, index) => ({
+    id: idMap.get(String(node.id)),
+    organization_id: ORG_ID,
+    parent_id: node.parent_id ? idMap.get(String(node.parent_id)) : null,
+    type: node.type,
+    name: node.name,
+    title: node.title ?? "",
+    notes: node.notes ?? "",
+    sort_order: node.sort_order ?? (index + 1) * 10,
+    version: 1,
+    updated_at: "2026-08-29T00:00:00Z",
+    updated_by_label: "测试员",
+    deleted_at: null,
+    deleted_batch_id: null,
+    deleted_by_label: null,
+  }));
+}
+
 async function mockSupabase(page) {
+  let serverNodes = structuredClone(baseNodes);
   await page.route("**/*.supabase.co/rest/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const method = route.request().method();
-    const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", headers: { "content-range": "0-2/3" }, body: JSON.stringify(body) });
+    const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", headers: { "content-range": `0-${Math.max(0, serverNodes.length - 1)}/${serverNodes.length}` }, body: JSON.stringify(body) });
 
     if (path.endsWith("/organizations")) return json([{ id: ORG_ID, name: "东莞市北泽五金制品有限公司", is_public: true }]);
-    if (path.endsWith("/org_nodes") && method === "GET") return json(baseNodes);
+    if (path.endsWith("/org_nodes") && method === "GET") return json(serverNodes);
     if (path.endsWith("/rpc/begin_public_edit_session")) return json({ ok: true, token: "test-edit-token", editor_name: "测试员", expires_at: "2099-01-01T00:00:00Z" });
     if (path.endsWith("/rpc/verify_public_edit_session")) return json({ ok: true, editor_name: "测试员", expires_at: "2099-01-01T00:00:00Z" });
     if (path.endsWith("/rpc/end_public_edit_session")) return json(null);
-    if (path.endsWith("/rpc/list_org_snapshots")) return json([{ id: "44444444-4444-4444-8444-444444444444", created_at: "2026-08-29T00:00:00Z", actor_label: "测试员", action_label: "测试快照", node_count: 3 }]);
-    if (path.endsWith("/rpc/update_org_node")) return json({ ...baseNodes[2], name: "张三", title: "QE" });
-    if (path.endsWith("/rpc/create_org_node")) return json({ ...baseNodes[2], id: "55555555-5555-4555-8555-555555555555", name: "李四" });
+    if (path.endsWith("/rpc/list_org_snapshots")) return json([{ id: "44444444-4444-4444-8444-444444444444", created_at: "2026-08-29T00:00:00Z", actor_label: "测试员", action_label: "测试快照", node_count: serverNodes.length }]);
+    if (path.endsWith("/rpc/import_public_org_nodes")) {
+      const body = route.request().postDataJSON();
+      serverNodes = cloudify(body.p_nodes ?? []);
+      return json({ ok: true, imported_count: serverNodes.length, backup_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" });
+    }
+    if (path.endsWith("/rpc/update_org_node")) return json({ ...serverNodes.find((node) => node.type === "person"), name: "张三", title: "QE" });
+    if (path.endsWith("/rpc/create_org_node")) return json({ ...serverNodes.find((node) => node.type === "person"), id: "55555555-5555-4555-8555-555555555555", name: "李四" });
     if (path.includes("/rpc/")) return json(null);
     return json([]);
   });
@@ -38,9 +64,7 @@ async function boot(page, viewport) {
   await expect(page.locator(".node-card")).toHaveCount(3);
   await expect(page.locator("#sync-status")).toContainText("云端只读");
   await page.waitForFunction(() => Boolean(window.BeizeCanvas));
-  if (viewport.width <= 700) {
-    await page.waitForFunction(() => document.querySelector("#tree-stage")?.dataset.initialFit === "done");
-  }
+  if (viewport.width <= 700) await page.waitForFunction(() => document.querySelector("#tree-stage")?.dataset.initialFit === "done");
 }
 
 test("desktop viewer supports search, collapse, fit and root focus", async ({ page }) => {
@@ -97,4 +121,32 @@ test("editor unlock uses a short token and never stores the password", async ({ 
   expect(storage.join(" ")).not.toContain("12346");
   expect(storage.join(" ")).toContain("test-edit-token");
   await expect(page.locator("#history-button")).toBeEnabled();
+});
+
+test("legacy browser draft is detected, migrated, reloaded and structurally verified", async ({ page }) => {
+  const legacy = [
+    { id: "old-root", parent_id: null, type: "company", name: "北泽五金", sort_order: 0 },
+    { id: "old-gm", parent_id: "old-root", type: "person", name: "洪晓辉", title: "总经理", sort_order: 10 },
+    { id: "old-quality", parent_id: "old-gm", type: "department", name: "品质中心", sort_order: 10 },
+    { id: "old-qe", parent_id: "old-quality", type: "person", name: "测试旧架构人员", title: "QE", notes: "旧架构备注", sort_order: 10 },
+  ];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.addInitScript((draft) => localStorage.setItem("beize-org-chart-draft-v1", JSON.stringify(draft)), legacy);
+  await mockSupabase(page);
+  await page.goto("/");
+  await expect(page.locator(".node-card")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "迁移本机旧架构" })).toBeVisible();
+
+  await page.getByRole("button", { name: "迁移本机旧架构" }).click();
+  await page.fill('#modal-content input[autocomplete="name"]', "测试员");
+  await page.fill('#modal-content input[type="password"]', "12346");
+  await page.getByRole("button", { name: "解锁编辑" }).click();
+  await expect(page.locator("#modal-title")).toHaveText("迁移本机旧架构");
+  await page.locator(".migration-confirm input").check();
+  await page.getByRole("button", { name: "确认迁移" }).click();
+
+  await expect(page.getByText("测试旧架构人员", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "迁移本机旧架构" })).toHaveCount(0);
+  const completion = await page.evaluate(() => localStorage.getItem("beize-org-chart:local-import-completed:v2"));
+  expect(completion).toContain("beize-org-chart-draft-v1");
 });
