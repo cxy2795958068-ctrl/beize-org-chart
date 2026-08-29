@@ -61,7 +61,17 @@ if (scroller) {
   window.addEventListener(
     "click",
     (event) => {
-      if (!suppressedGesture || performance.now() >= suppressedGesture.until || !isInsideCanvas(event)) return;
+      if (!suppressedGesture || !isInsideCanvas(event)) return;
+
+      // A click following a touch gesture is only suppressed when the browser
+      // explicitly identifies it as touch-originated. Mouse clicks and a fresh
+      // pointer click must never be swallowed by the gesture guard.
+      const pointerType = typeof event.pointerType === "string" ? event.pointerType : "";
+      const firesTouchEvents = event.sourceCapabilities?.firesTouchEvents === true;
+      const touchOriginated = pointerType === "touch" || firesTouchEvents;
+      if (!touchOriginated) return;
+      if (performance.now() >= suppressedGesture.until) return;
+
       const distance = Math.hypot(event.clientX - suppressedGesture.x, event.clientY - suppressedGesture.y);
       if (distance > SUPPRESS_RADIUS) return;
       event.preventDefault();
