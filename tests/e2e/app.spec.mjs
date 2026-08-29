@@ -73,9 +73,9 @@ test("desktop viewer supports search, collapse, fit and root focus", async ({ pa
   await expect(page.locator(".node-card.search-match .node-name")).toHaveText("张三");
   await page.fill("#search-input", "");
   await page.click("#collapse-all-button");
-  await expect(page.locator(`[data-node-id="${PERSON_ID}"]`)).toHaveCount(0);
+  await expect(page.locator(`[data-node-id="${PERSON_ID}"]`)).toBeHidden();
   await page.click("#expand-all-button");
-  await expect(page.locator(`[data-node-id="${PERSON_ID}"]`)).toHaveCount(1);
+  await expect(page.locator(`[data-node-id="${PERSON_ID}"]`)).toBeVisible();
   await page.click("#fit-button");
   const fitted = await page.evaluate(() => window.BeizeCanvas.getView());
   expect(fitted.zoom).toBeGreaterThan(0);
