@@ -116,7 +116,7 @@ test("cycle and duplicate connections are blocked before write", async ({ page }
   await page.click("#graph-connect-button");
   await page.click("#graph-connect-button");
   await page.click(`[data-node-id="${ENG}"]`);
-  await page.click(`[data-node-id="${COMPANY}"]`);
+  await page.click(`[data-node-id="${GM1}"]`);
   await expect(page.locator("#toast-region")).toContainText("循环关系");
   await expect(page.locator(".graph-edge")).toHaveCount(5);
 });
