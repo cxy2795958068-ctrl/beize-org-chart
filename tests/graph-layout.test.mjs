@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { computeGraphVisibility, layoutDag, normalizeGraphEdges, wouldCreateCycle } from "../src/graph-layout.js";
+import { computeGraphSearch, computeGraphVisibility, getExclusiveDescendantIds, layoutDag, normalizeGraphEdges, wouldCreateCycle } from "../src/graph-layout.js";
 
 const nodes = [
   { id: "company", parent_id: null, name: "公司", type: "company", sort_order: 0 },
@@ -53,4 +53,30 @@ test("cycle detection blocks reverse connection and self loop", () => {
   assert.equal(wouldCreateCycle(edges, "eng", "company"), true);
   assert.equal(wouldCreateCycle(edges, "gm1", "gm1"), true);
   assert.equal(wouldCreateCycle(edges, "eng", "sales"), false);
+});
+
+test("search includes every upstream path for a multi-parent match", () => {
+  const edges = normalizeGraphEdges(nodes, [
+    { parent_id: "company", child_id: "gm1", is_primary: true },
+    { parent_id: "company", child_id: "gm2", is_primary: true },
+    { parent_id: "gm1", child_id: "eng", is_primary: true },
+    { parent_id: "gm2", child_id: "eng", is_primary: false },
+  ]);
+  const result = computeGraphSearch(nodes, edges, "工程");
+  assert.deepEqual([...result.matches], ["eng"]);
+  assert.deepEqual([...result.visible].sort(), ["company", "eng", "gm1", "gm2"]);
+});
+
+test("deleting one manager preserves descendants shared with another manager", () => {
+  const deleteNodes = nodes.map((node) => node.id === "sales" ? { ...node, parent_id: "eng" } : node);
+  const edges = normalizeGraphEdges(deleteNodes, [
+    { parent_id: "company", child_id: "gm1", is_primary: true },
+    { parent_id: "company", child_id: "gm2", is_primary: true },
+    { parent_id: "gm1", child_id: "eng", is_primary: true },
+    { parent_id: "gm2", child_id: "eng", is_primary: false },
+    { parent_id: "eng", child_id: "sales", is_primary: true },
+  ]);
+  assert.deepEqual([...getExclusiveDescendantIds(deleteNodes, edges, "gm1")], []);
+  assert.deepEqual([...getExclusiveDescendantIds(deleteNodes, edges, "gm2")], []);
+  assert.deepEqual([...getExclusiveDescendantIds(deleteNodes, edges, "eng")], ["sales"]);
 });
