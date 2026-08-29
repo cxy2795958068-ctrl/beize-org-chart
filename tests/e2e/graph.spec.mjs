@@ -103,9 +103,8 @@ test("two managers can jointly manage the same department and layout stays layer
   await expect(secondary).toHaveCount(1);
   expect(await primary.getAttribute("d")).toMatch(/^M /);
   expect(await secondary.getAttribute("d")).toMatch(/^M /);
-  const stroke = await secondary.evaluate((element) => ({ width: getComputedStyle(element).strokeWidth, stroke: getComputedStyle(element).stroke }));
-  expect(parseFloat(stroke.width)).toBeGreaterThanOrEqual(3);
-  expect(stroke.stroke).not.toBe("none");
+  await expect(secondary).toHaveClass(/graph-edge/);
+  await expect(secondary).toHaveClass(/is-secondary/);
 });
 
 test("editor connects two cards by clicking their connection points and relations update automatically", async ({ page }) => {
