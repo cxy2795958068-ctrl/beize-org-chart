@@ -103,7 +103,7 @@ if (enabled) {
     graph.classList.toggle("graph-port-editing", editing);
 
     graph.querySelectorAll(".graph-port").forEach((port) => {
-      const nodeId = String(port.dataset.nodeId ?? "");
+      const nodeId = String(port.dataset.portNodeId ?? "");
       const kind = String(port.dataset.portKind ?? "");
       const active = Boolean(state.port && String(state.port.nodeId) === nodeId && state.port.kind === kind);
       const compatible = Boolean(state.port && String(state.port.nodeId) !== nodeId && state.port.kind !== kind);
@@ -129,7 +129,7 @@ if (enabled) {
         output.dataset.portKind = "out";
         card.append(output);
       }
-      output.dataset.nodeId = nodeId;
+      output.dataset.portNodeId = nodeId;
       output.setAttribute("aria-label", `${label(node)} 向下连接点`);
       output.title = "向下连接";
 
@@ -144,7 +144,7 @@ if (enabled) {
           input.dataset.portKind = "in";
           card.append(input);
         }
-        input.dataset.nodeId = nodeId;
+        input.dataset.portNodeId = nodeId;
         input.setAttribute("aria-label", `${label(node)} 上级连接点`);
         input.title = "接收上级连接";
       }
@@ -511,7 +511,7 @@ if (enabled) {
     if (graph && port && graph.contains(port)) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      selectPort(String(port.dataset.nodeId ?? ""), String(port.dataset.portKind ?? ""));
+      selectPort(String(port.dataset.portNodeId ?? ""), String(port.dataset.portKind ?? ""));
       return;
     }
 
