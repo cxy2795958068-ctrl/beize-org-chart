@@ -13,8 +13,6 @@ if (scroller) {
   const isInsideCanvas = (event) => event.composedPath?.().includes(scroller) || scroller.contains(event.target);
   const nodeCardFromEvent = (event) => event.target instanceof Element ? event.target.closest(".node-card") : null;
 
-  // Desktop/node clicks should remain normal clicks. The canvas may only start a
-  // mouse/pen pan from blank canvas, not from a node card.
   window.addEventListener(
     "pointerdown",
     (event) => {
@@ -77,8 +75,6 @@ if (scroller) {
     }
 
     if (wasNodeTap) {
-      // Pointer capture is released later in the same pointerup dispatch by the
-      // canvas listener. Run the semantic node click immediately afterwards.
       suppressedGesture = {
         x: touch.lastX,
         y: touch.lastY,
@@ -98,10 +94,6 @@ if (scroller) {
     "click",
     (event) => {
       if (!suppressedGesture || !isInsideCanvas(event)) return;
-
-      // Programmatic semantic clicks and genuine mouse clicks must pass. Only
-      // the browser-generated click that originates from a just-finished touch
-      // gesture/tap is eligible for suppression.
       const pointerType = typeof event.pointerType === "string" ? event.pointerType : "";
       const firesTouchEvents = event.sourceCapabilities?.firesTouchEvents === true;
       const touchOriginated = pointerType === "touch" || firesTouchEvents;
@@ -136,3 +128,5 @@ if (stage && window.matchMedia("(max-width: 700px)").matches) {
     observer.observe(stage, { childList: true });
   }
 }
+
+import("./graph-enhancer.js");
