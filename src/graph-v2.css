@@ -1,0 +1,203 @@
+.org-graph {
+  position: relative !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  list-style: none !important;
+  min-width: 1px;
+  min-height: 1px;
+}
+
+.org-graph::before,
+.org-graph::after,
+.org-graph ul::before,
+.org-graph li::before,
+.org-graph li::after {
+  display: none !important;
+  content: none !important;
+}
+
+.org-graph .node-card {
+  position: absolute !important;
+  z-index: 2;
+  margin: 0 !important;
+}
+
+.graph-edges {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.graph-edge {
+  fill: none;
+  stroke: #8795a8;
+  stroke-width: 3.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-edge.is-primary {
+  stroke: #75859a;
+}
+
+.graph-edge.is-secondary {
+  stroke: #9aa7b8;
+}
+
+.graph-connect-button.active {
+  color: #fff;
+  background: #2d5f9a;
+  border-color: #2d5f9a;
+}
+
+.org-graph.graph-connect-mode .node-card {
+  cursor: crosshair !important;
+}
+
+.org-graph.graph-connect-mode .node-card::after {
+  content: "点击选择";
+  position: absolute;
+  right: 12px;
+  top: 14px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: rgba(23, 36, 61, .86);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.org-graph .node-card.graph-connect-source {
+  outline: 5px solid rgba(47, 126, 207, .28);
+  box-shadow: 0 0 0 3px rgba(47, 126, 207, .18), 0 18px 38px rgba(32, 73, 118, .18);
+}
+
+.graph-relation-panel {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.graph-relation-panel h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.graph-relation-panel > p {
+  margin: 6px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.graph-relation-group + .graph-relation-group {
+  margin-top: 14px;
+}
+
+.graph-relation-group-title {
+  display: block;
+  margin-bottom: 7px;
+  color: #687386;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.graph-relation-list {
+  display: grid;
+  gap: 7px;
+}
+
+.graph-relation-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.graph-relation-row strong {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.graph-relation-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e8eef7;
+  color: #49617f;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.graph-relation-remove {
+  flex: 0 0 auto;
+  min-height: 30px !important;
+  padding: 0 9px !important;
+  font-size: 11px !important;
+}
+
+.graph-relation-empty {
+  padding: 9px 10px;
+  border: 1px dashed #d7dce4;
+  border-radius: 10px;
+  color: #8a92a1;
+  font-size: 12px;
+}
+
+.graph-relation-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.graph-connect-tip {
+  position: fixed;
+  left: 50%;
+  bottom: max(24px, calc(env(safe-area-inset-bottom) + 18px));
+  z-index: 120;
+  transform: translateX(-50%);
+  max-width: min(92vw, 520px);
+  padding: 11px 16px;
+  border-radius: 999px;
+  background: rgba(23, 36, 61, .94);
+  color: #fff;
+  box-shadow: 0 12px 34px rgba(23, 36, 61, .26);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .graph-connect-button {
+    min-width: 44px !important;
+    padding: 0 10px !important;
+  }
+
+  .graph-relation-row {
+    min-height: 44px;
+  }
+
+  .graph-relation-remove {
+    min-height: 36px !important;
+  }
+
+  .graph-connect-tip {
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    border-radius: 14px;
+  }
+}
