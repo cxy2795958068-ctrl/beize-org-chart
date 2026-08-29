@@ -6,6 +6,7 @@ const zoomInButton = document.querySelector("#zoom-in");
 const zoomOutButton = document.querySelector("#zoom-out");
 const zoomResetButton = document.querySelector("#zoom-reset");
 const zoomValue = document.querySelector("#zoom-value");
+const fitButton = document.querySelector("#fit-button");
 const canvasHint = document.querySelector(".canvas-hint");
 
 if (scroller && stage) {
@@ -16,8 +17,12 @@ if (scroller && stage) {
   const DRAG_THRESHOLD = 4;
   const INERTIA_FRICTION = 0.92;
   const INERTIA_STOP_SPEED = 0.018;
+  const AUTO_FIT_GUARD_MS = 650;
 
   const pointers = new Map();
+  let lastUserInteractionAt = Number.NEGATIVE_INFINITY;
+  const markUserInteraction = () => { lastUserInteractionAt = performance.now(); };
+
   const view = {
     x: 0,
     y: 0,
@@ -177,12 +182,13 @@ if (scroller && stage) {
     return { x, y };
   };
 
-  const fitToContent = ({ maxZoom = 1, padding } = {}) => {
+  const fitToContent = ({ maxZoom = 1, padding, force = false } = {}) => {
+    if (!force && performance.now() - lastUserInteractionAt < AUTO_FIT_GUARD_MS) return false;
     stopInertia();
     const rect = scroller.getBoundingClientRect();
     const pad = Number.isFinite(padding) ? padding : (rect.width < 700 ? 18 : 42);
     const content = stage.querySelector(".org-tree") || stage.firstElementChild;
-    if (!content) return;
+    if (!content) return false;
     const width = Math.max(content.scrollWidth || content.offsetWidth || 1, 1);
     const height = Math.max(content.scrollHeight || content.offsetHeight || 1, 1);
     const availableWidth = Math.max(80, rect.width - pad * 2);
@@ -192,12 +198,13 @@ if (scroller && stage) {
     view.x = (rect.width - width * view.zoom) / 2 - point.x * view.zoom;
     view.y = (rect.height - height * view.zoom) / 2 - point.y * view.zoom;
     applyView();
+    return true;
   };
 
   const focusNode = (nodeId, { minZoom = 0.55, maxZoom = 1.1 } = {}) => {
-    if (!nodeId) return;
+    if (!nodeId) return false;
     const target = stage.querySelector(`[data-node-id="${CSS.escape(String(nodeId))}"]`);
-    if (!target) return;
+    if (!target) return false;
     stopInertia();
     const rect = scroller.getBoundingClientRect();
     const point = elementPointInStage(target);
@@ -206,10 +213,12 @@ if (scroller && stage) {
     view.x = rect.width / 2 - (point.x + target.offsetWidth / 2) * view.zoom;
     view.y = rect.height * 0.38 - (point.y + target.offsetHeight / 2) * view.zoom;
     applyView();
+    return true;
   };
 
   scroller.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || event.ctrlKey || event.target.closest("button, input, select, textarea, a")) return;
+    markUserInteraction();
     const pointer = { id: event.pointerId, pointerType: event.pointerType || "mouse", clientX: event.clientX, clientY: event.clientY };
     pointers.set(event.pointerId, pointer);
     stopInertia();
@@ -293,6 +302,7 @@ if (scroller && stage) {
   }, true);
 
   scroller.addEventListener("wheel", (event) => {
+    markUserInteraction();
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!event.deltaY) return;
@@ -301,6 +311,7 @@ if (scroller && stage) {
 
   const interceptZoomButton = (button, action) => {
     button?.addEventListener("click", (event) => {
+      markUserInteraction();
       event.preventDefault();
       event.stopImmediatePropagation();
       action();
@@ -309,6 +320,13 @@ if (scroller && stage) {
   interceptZoomButton(zoomOutButton, () => zoomAtViewportCenter(1 / 1.18));
   interceptZoomButton(zoomInButton, () => zoomAtViewportCenter(1.18));
   interceptZoomButton(zoomResetButton, resetZoom);
+
+  fitButton?.addEventListener("click", (event) => {
+    markUserInteraction();
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    fitToContent({ force: true });
+  }, true);
 
   window.BeizeCanvas = Object.freeze({
     fitToContent,
