@@ -1,3 +1,5 @@
+import "./connector-visibility.css";
+
 const scroller = document.querySelector("#tree-scroller");
 const stage = document.querySelector("#tree-stage");
 
