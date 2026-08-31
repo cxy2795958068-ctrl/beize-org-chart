@@ -117,7 +117,10 @@ if (scroller) {
   );
 }
 
-if (stage && window.matchMedia("(max-width: 700px)").matches) {
+// On the first visit/render, always bring the organization chart into view on
+// both desktop and mobile. The observer waits for the async cloud data render,
+// then performs exactly one forced fit so users never land on an empty canvas.
+if (stage) {
   let completed = false;
   const fitInitialTree = () => {
     if (completed) return true;
